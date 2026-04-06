@@ -72,21 +72,31 @@ confirmActionBtn.addEventListener('click', () => {
     if (selectedTarget) {
         ws.send({ type: 'night_action', payload: { target_id: selectedTarget, secondary_target_id: null } });
         confirmActionBtn.disabled = true;
+        confirmActionBtn.innerHTML = '<span class="btn-spinner"></span> Confirming…';
+        skipActionBtn.disabled = true;
         selectedTarget = null;
     }
 });
 
 skipActionBtn.addEventListener('click', () => {
     ws.send({ type: 'night_action', payload: { target_id: null, secondary_target_id: null } });
+    skipActionBtn.disabled = true;
+    skipActionBtn.innerHTML = '<span class="btn-spinner"></span> Skipping…';
+    confirmActionBtn.disabled = true;
 });
 
 castVoteBtn.addEventListener('click', () => {
     ws.send({ type: 'vote', payload: { target_id: selectedTarget } });
     castVoteBtn.disabled = true;
+    castVoteBtn.innerHTML = '<span class="btn-spinner"></span> Voting…';
+    skipVoteBtn.disabled = true;
 });
 
 skipVoteBtn.addEventListener('click', () => {
     ws.send({ type: 'vote', payload: { target_id: null } });
+    skipVoteBtn.disabled = true;
+    skipVoteBtn.innerHTML = '<span class="btn-spinner"></span> Abstaining…';
+    castVoteBtn.disabled = true;
 });
 
 chatSendBtn.addEventListener('click', sendChat);
@@ -229,6 +239,11 @@ function handleRoleAssigned({ role, description_key, faction }) {
 function handlePhaseChanged({ phase, round, timer_secs }) {
     switch (phase) {
         case 'night':
+            // Reset action buttons for new night
+            confirmActionBtn.disabled = true;
+            confirmActionBtn.textContent = 'Confirm';
+            skipActionBtn.disabled = false;
+            skipActionBtn.textContent = 'Skip';
             // Night screen will be shown when prompt arrives
             // Show mafia chat if mafia
             if (playerFaction === 'mafia') {
@@ -242,10 +257,18 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
             if (timer_secs > 0) startTimer(timer_secs, document.getElementById('day-timer'));
             break;
         case 'voting':
-            break; // Vote targets come via alive_player_list
+            // Reset vote buttons for new voting phase
+            castVoteBtn.disabled = true;
+            castVoteBtn.textContent = 'Cast Vote';
+            skipVoteBtn.disabled = false;
+            skipVoteBtn.textContent = 'Abstain';
+            selectedTarget = null;
+            break;
         case 'execution':
             break;
         case 'game_over':
+            // Transition to game over from any screen
+            showScreen(gameoverScreen);
             break;
     }
 }
@@ -300,10 +323,57 @@ function handleGameOver({ winner, player_roles }) {
 }
 
 function handleError({ message }) {
+    // Show toast notification for all errors
+    showErrorToast(message);
+
+    // Also show in join form if on join screen
     const errEl = document.getElementById('join-error');
-    errEl.textContent = message;
-    errEl.classList.remove('hidden');
+    if (errEl && joinScreen.classList.contains('active')) {
+        errEl.textContent = message;
+        errEl.classList.remove('hidden');
+    }
+
+    // Re-enable join button so user can retry
     joinBtn.disabled = false;
+
+    // Re-enable action buttons on error so player can retry
+    confirmActionBtn.disabled = false;
+    confirmActionBtn.textContent = 'Confirm';
+    skipActionBtn.disabled = false;
+    skipActionBtn.textContent = 'Skip';
+    castVoteBtn.disabled = false;
+    castVoteBtn.textContent = 'Cast Vote';
+    skipVoteBtn.disabled = false;
+    skipVoteBtn.textContent = 'Abstain';
+}
+
+function showErrorToast(message) {
+    showToast(message, 'error');
+}
+
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    // Trigger entrance animation
+    requestAnimationFrame(() => toast.classList.add('toast-visible'));
+
+    setTimeout(() => {
+        toast.classList.remove('toast-visible');
+        toast.classList.add('toast-exit');
+        toast.addEventListener('transitionend', () => toast.remove());
+        // Fallback removal
+        setTimeout(() => toast.remove(), 500);
+    }, 4000);
 }
 
 function startTimer(secs, el) {

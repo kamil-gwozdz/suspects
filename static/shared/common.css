@@ -25,3 +25,112 @@ button, .btn-primary, .btn-secondary, input, select {
 a {
     transition: color 0.2s ease, opacity 0.2s ease;
 }
+
+/* ═══════════════════════════════════════
+   Toast Notifications
+   ═══════════════════════════════════════ */
+
+.toast-container {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    pointer-events: none;
+    max-width: 380px;
+}
+
+.toast {
+    padding: 0.75rem 1.25rem;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    pointer-events: auto;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.toast-visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.toast-exit {
+    opacity: 0;
+    transform: translateX(100%);
+}
+
+.toast-error {
+    background: #e74c3c;
+    border-left: 4px solid #c0392b;
+}
+
+.toast-info {
+    background: #27ae60;
+    border-left: 4px solid #1e8449;
+}
+
+.toast-warning {
+    background: #f39c12;
+    border-left: 4px solid #d68910;
+    color: #1a1a1a;
+}
+
+/* ═══════════════════════════════════════
+   Connection Lost Overlay
+   ═══════════════════════════════════════ */
+
+.connection-lost-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.connection-lost-overlay.hidden {
+    display: none;
+}
+
+.connection-lost-content {
+    text-align: center;
+    color: #fff;
+    font-size: 1.2rem;
+}
+
+.connection-lost-content p {
+    margin-top: 1rem;
+}
+
+.connection-sub {
+    font-size: 0.85rem;
+    opacity: 0.6;
+}
+
+/* ═══════════════════════════════════════
+   Button Spinner
+   ═══════════════════════════════════════ */
+
+.btn-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: btn-spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+}
+
+@keyframes btn-spin {
+    to { transform: rotate(360deg); }
+}
