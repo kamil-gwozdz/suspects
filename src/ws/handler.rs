@@ -6,6 +6,7 @@ use axum::{
     response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt};
+use rand::Rng;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
@@ -1150,11 +1151,11 @@ fn resolve_and_send_vote_result(room: &mut Room, pool: &Option<SqlitePool>) {
         .map(|(id, _)| id.clone())
         .collect();
 
-    // Resolve ties: Godfather's vote is the tie-breaker
+    // Resolve ties: Godfather's vote is the tie-breaker, otherwise random
     let lynch_target = if top_targets.len() == 1 {
         Some(top_targets[0].clone())
     } else if top_targets.len() > 1 {
-        // Find the Godfather (or first Mafioso if no Godfather)
+        // Find the alive Godfather (or first alive Mafioso)
         let godfather_vote = room
             .players
             .iter()
@@ -1173,10 +1174,14 @@ fn resolve_and_send_vote_result(room: &mut Room, pool: &Option<SqlitePool>) {
             if top_targets.contains(gf_target) {
                 Some(gf_target.clone())
             } else {
-                None // Tie stands — no lynch
+                // Mafia leader voted for someone not in the tie — random
+                let idx = rand::rng().random_range(0..top_targets.len());
+                Some(top_targets[idx].clone())
             }
         } else {
-            None // No mafia leader vote among tied — no lynch
+            // No alive mafia leader — random pick among tied
+            let idx = rand::rng().random_range(0..top_targets.len());
+            Some(top_targets[idx].clone())
         }
     } else {
         None
