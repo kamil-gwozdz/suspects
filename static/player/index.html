@@ -72,9 +72,12 @@
         <!-- Voting Screen -->
         <div id="vote-screen" class="screen">
             <h2 data-i18n="vote">Vote to eliminate</h2>
-            <div id="vote-target-list" class="target-list"></div>
-            <button id="cast-vote-btn" class="btn-primary" disabled data-i18n="vote_btn">Cast Vote</button>
-            <button id="skip-vote-btn" class="btn-secondary" data-i18n="abstain">Abstain</button>
+            <div id="vote-target-list" class="vote-target-list"></div>
+            <div class="vote-actions">
+                <button id="cast-vote-btn" class="btn-primary" disabled data-i18n="vote_btn">Cast Vote</button>
+                <button id="skip-vote-btn" class="btn-secondary" data-i18n="abstain">Abstain</button>
+            </div>
+            <div id="vote-status" class="vote-status"></div>
         </div>
 
         <!-- Dead Screen -->

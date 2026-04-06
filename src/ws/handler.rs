@@ -534,15 +534,6 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                             continue;
                         }
 
-                        // Prevent duplicate votes
-                        if room.votes.contains_key(pid) {
-                            let err = ServerMessage::Error {
-                                message: "You have already cast your vote".to_string(),
-                            };
-                            let _ = tx.send(serde_json::to_string(&err).unwrap());
-                            continue;
-                        }
-
                         // Check player is alive
                         if let Some(player) = room.get_player(pid) {
                             if !player.alive {

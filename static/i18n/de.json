@@ -131,5 +131,7 @@
   "game_starting_in": "Spiel startet in {seconds}...",
   "tap_when_ready": "Tippe, wenn du bereit bist",
   "placeholder_room_code": "Raumcode",
-  "ready_to_vote": "Bereit zur Abstimmung"
+  "ready_to_vote": "Bereit zur Abstimmung",
+  "vote_change": "Stimme ändern",
+  "votes_cast_count": "{count}/{total} abgestimmt"
 }

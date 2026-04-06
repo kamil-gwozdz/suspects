@@ -670,3 +670,92 @@ body {
     animation: shake 0.4s ease;
     border-color: var(--accent) !important;
 }
+
+/* Voting screen — target list with live vote display */
+.vote-target-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+    max-width: 400px;
+    margin: 1rem auto;
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.vote-target-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.8rem 1rem;
+    background: var(--bg-card, #14141f);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.vote-target-row:active {
+    transform: scale(0.97);
+}
+
+.vote-target-row.selected {
+    border-color: var(--accent, #e74c3c);
+    background: rgba(231, 76, 60, 0.1);
+}
+
+.vote-target-row.has-votes {
+    background: rgba(241, 196, 15, 0.05);
+}
+
+.vote-target-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.vote-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent, #e74c3c);
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.vote-target-voters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    justify-content: flex-end;
+    max-width: 50%;
+}
+
+.voter-badge {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.1);
+    color: var(--text-dim, #888);
+    white-space: nowrap;
+}
+
+.vote-actions {
+    display: flex;
+    gap: 0.8rem;
+    margin-top: 1rem;
+    justify-content: center;
+}
+
+.vote-status {
+    margin-top: 0.8rem;
+    color: var(--text-dim, #888);
+    font-size: 0.9rem;
+    text-align: center;
+}

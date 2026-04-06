@@ -131,5 +131,7 @@
   "game_starting_in": "Ойын {seconds} секундтан кейін басталады...",
   "tap_when_ready": "Дайын болғанда басыңыз",
   "placeholder_room_code": "Бөлме коды",
-  "ready_to_vote": "Дауыс беруге дайын"
+  "ready_to_vote": "Дауыс беруге дайын",
+  "vote_change": "Дауысты өзгерту",
+  "votes_cast_count": "{count}/{total} дауыс берді"
 }

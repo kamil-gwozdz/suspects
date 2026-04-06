@@ -143,17 +143,19 @@ skipActionBtn.addEventListener('click', () => {
 });
 
 castVoteBtn.addEventListener('click', () => {
+    if (!selectedTarget) return;
     ws.send({ type: 'vote', payload: { target_id: selectedTarget } });
-    castVoteBtn.disabled = true;
-    castVoteBtn.innerHTML = `<span class="btn-spinner"></span> ${t('voting_in_progress')}`;
-    skipVoteBtn.disabled = true;
+    castVoteBtn.textContent = t('vote_change');
 });
 
 skipVoteBtn.addEventListener('click', () => {
     ws.send({ type: 'vote', payload: { target_id: null } });
-    skipVoteBtn.disabled = true;
-    skipVoteBtn.innerHTML = `<span class="btn-spinner"></span> ${t('abstaining')}`;
+    selectedTarget = null;
+    // Deselect all targets visually
+    document.querySelectorAll('.vote-target-btn').forEach(b => b.classList.remove('selected'));
     castVoteBtn.disabled = true;
+    castVoteBtn.textContent = t('vote_btn');
+    skipVoteBtn.textContent = `✓ ${t('abstain')}`;
 });
 
 readyToVoteBtn.addEventListener('click', () => {
@@ -190,7 +192,8 @@ ws.onMessage((msg) => {
             handleInvestigation(msg.payload);
             break;
         case 'vote_update':
-            break; // Player sees their own vote
+            handleVoteUpdate(msg.payload);
+            break;
         case 'auto_start_countdown':
             handleAutoStartCountdown(msg.payload);
             break;
@@ -202,6 +205,12 @@ ws.onMessage((msg) => {
             break;
         case 'mini_game_prompt':
             handleMiniGamePrompt(msg.payload);
+            break;
+        case 'alive_player_list':
+            alivePlayersCache = msg.payload.players || [];
+            break;
+        case 'all_ready_to_vote':
+            // Server auto-transitions to voting, nothing extra needed
             break;
         case 'error':
             handleError(msg.payload);
@@ -347,12 +356,14 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
             if (timer_secs > 0) startTimer(timer_secs, document.getElementById('day-timer'));
             break;
         case 'voting':
-            // Reset vote buttons for new voting phase
+            // Reset vote state for new voting phase
             castVoteBtn.disabled = true;
             castVoteBtn.textContent = t('vote_btn');
             skipVoteBtn.disabled = false;
             skipVoteBtn.textContent = t('abstain');
             selectedTarget = null;
+            buildVoteTargetList();
+            showScreen(voteScreen);
             break;
         case 'execution':
             break;
@@ -413,6 +424,81 @@ function handleInvestigation({ target_name, appears_guilty }) {
         ? `🔴 ${t('investigation_suspicious')}`
         : `🟢 ${t('investigation_innocent')}`;
     alert(t('investigation_result', { name: target_name, result }));
+}
+
+// Track alive players for vote target list
+let alivePlayersCache = [];
+
+function buildVoteTargetList() {
+    const container = document.getElementById('vote-target-list');
+    container.innerHTML = '';
+    selectedTarget = null;
+
+    alivePlayersCache.forEach(target => {
+        if (target.id === playerId) return; // Can't vote for yourself
+        const row = document.createElement('div');
+        row.className = 'vote-target-row';
+        row.dataset.id = target.id;
+
+        const nameEl = document.createElement('span');
+        nameEl.className = 'vote-target-name';
+        nameEl.textContent = target.name;
+
+        const votersEl = document.createElement('span');
+        votersEl.className = 'vote-target-voters';
+        votersEl.dataset.targetId = target.id;
+
+        row.appendChild(nameEl);
+        row.appendChild(votersEl);
+
+        row.addEventListener('click', () => {
+            container.querySelectorAll('.vote-target-row').forEach(r => r.classList.remove('selected'));
+            row.classList.add('selected');
+            selectedTarget = target.id;
+            castVoteBtn.disabled = false;
+            castVoteBtn.textContent = t('vote_btn');
+            skipVoteBtn.textContent = t('abstain');
+        });
+
+        container.appendChild(row);
+    });
+}
+
+function handleVoteUpdate({ votes }) {
+    // Update voter badges on each target
+    const votesByTarget = {};
+    votes.forEach(v => {
+        const tid = v.target_id;
+        if (!tid) return; // abstain
+        if (!votesByTarget[tid]) votesByTarget[tid] = [];
+        votesByTarget[tid].push(v.voter_name);
+    });
+
+    document.querySelectorAll('.vote-target-voters').forEach(el => {
+        const tid = el.dataset.targetId;
+        const voterNames = votesByTarget[tid] || [];
+        el.innerHTML = voterNames.map(n =>
+            `<span class="voter-badge">${escapeHtml(n)}</span>`
+        ).join('');
+        // Highlight rows with votes
+        const row = el.closest('.vote-target-row');
+        if (row) {
+            row.classList.toggle('has-votes', voterNames.length > 0);
+            const countEl = row.querySelector('.vote-count');
+            if (countEl) countEl.remove();
+            if (voterNames.length > 0) {
+                const count = document.createElement('span');
+                count.className = 'vote-count';
+                count.textContent = voterNames.length;
+                row.querySelector('.vote-target-name').appendChild(count);
+            }
+        }
+    });
+
+    // Update status bar
+    const totalVotes = votes.length;
+    const statusEl = document.getElementById('vote-status');
+    statusEl.textContent = t('votes_cast_count', { count: totalVotes, total: alivePlayersCache.length });
 }
 
 function handleGameOver({ winner, player_roles }) {
