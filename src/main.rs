@@ -85,6 +85,22 @@ async fn main() {
 
     let app_state = rooms::manager::AppState::new(pool);
 
+    // Spawn background task to clean up abandoned rooms every 5 minutes
+    {
+        let cleanup_state = app_state.clone();
+        tokio::spawn(async move {
+            let cleanup_interval = std::time::Duration::from_secs(5 * 60);
+            let abandon_threshold = std::time::Duration::from_secs(10 * 60);
+            loop {
+                tokio::time::sleep(cleanup_interval).await;
+                let removed = cleanup_state.remove_abandoned_rooms(abandon_threshold).await;
+                if !removed.is_empty() {
+                    tracing::info!(count = removed.len(), "Cleaned up abandoned rooms: {:?}", removed);
+                }
+            }
+        });
+    }
+
     let app = Router::new()
         .route("/ws/host", get(ws::handler::host_ws_handler))
         .route("/ws/player", get(ws::handler::player_ws_handler))

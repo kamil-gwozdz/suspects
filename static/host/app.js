@@ -24,6 +24,17 @@ createRoomBtn.addEventListener('click', () => {
 
 startGameBtn.addEventListener('click', () => {
     ws.send({ type: 'start_game' });
+    startGameBtn.disabled = true;
+    startGameBtn.innerHTML = '<span class="btn-spinner"></span> Starting…';
+});
+
+// Connection lost overlay
+ws.onStateChange((state) => {
+    if (state === 'disconnected' || state === 'reconnecting') {
+        showConnectionLostOverlay();
+    } else if (state === 'connected') {
+        hideConnectionLostOverlay();
+    }
 });
 
 ws.onMessage((msg) => {
@@ -65,7 +76,13 @@ ws.onMessage((msg) => {
             handleMiniGameResult(msg.payload);
             break;
         case 'error':
-            showError(msg.payload.message);
+            showErrorToast(msg.payload.message);
+            // Re-enable start button on error so host can retry
+            startGameBtn.disabled = false;
+            startGameBtn.textContent = startGameBtn.getAttribute('data-i18n') === 'start_game' ? 'Start Game' : startGameBtn.textContent;
+            if (startGameBtn.querySelector('.btn-spinner')) {
+                startGameBtn.innerHTML = 'Start Game';
+            }
             break;
     }
 });
@@ -676,8 +693,56 @@ function formatPhase(phase) {
     return names[phase] || phase;
 }
 
-function showError(message) {
-    console.error('Server error:', message);
+function showErrorToast(message) {
+    showToast(message, 'error');
+}
+
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    // Trigger entrance animation
+    requestAnimationFrame(() => toast.classList.add('toast-visible'));
+
+    setTimeout(() => {
+        toast.classList.remove('toast-visible');
+        toast.classList.add('toast-exit');
+        toast.addEventListener('transitionend', () => toast.remove());
+        // Fallback removal
+        setTimeout(() => toast.remove(), 500);
+    }, 4000);
+}
+
+function showConnectionLostOverlay() {
+    let overlay = document.getElementById('host-connection-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'host-connection-overlay';
+        overlay.className = 'connection-lost-overlay';
+        overlay.innerHTML = `
+            <div class="connection-lost-content">
+                <div class="reconnect-spinner"></div>
+                <p>Connection lost</p>
+                <p class="connection-sub">Attempting to reconnect…</p>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    }
+    overlay.classList.remove('hidden');
+}
+
+function hideConnectionLostOverlay() {
+    const overlay = document.getElementById('host-connection-overlay');
+    if (overlay) overlay.classList.add('hidden');
 }
 
 function escapeHtml(text) {

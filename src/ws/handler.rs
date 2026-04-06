@@ -226,6 +226,7 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
         let text: &str = &text;
 
         let Ok(client_msg) = serde_json::from_str::<ClientMessage>(text) else {
+            warn!("Player sent invalid message format");
             let err = ServerMessage::Error { message: "Invalid message format".to_string() };
             let _ = tx.send(serde_json::to_string(&err).unwrap());
             continue;
@@ -233,9 +234,50 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
 
         match client_msg {
             ClientMessage::JoinRoom { room_code, player_name } => {
+                // Validate player name
+                let trimmed_name = player_name.trim().to_string();
+                if trimmed_name.is_empty() || trimmed_name.len() > 20 {
+                    let err = ServerMessage::Error {
+                        message: "Name must be between 1 and 20 characters".to_string(),
+                    };
+                    let _ = tx.send(serde_json::to_string(&err).unwrap());
+                    continue;
+                }
+
                 if let Some(room_arc) = state.get_room(&room_code).await {
                     let mut room = room_arc.lock().await;
-                    let id = room.add_player(player_name.clone());
+
+                    // Check if game already started
+                    if !room.phase_allows_action("join") {
+                        let err = ServerMessage::Error {
+                            message: "Game has already started, cannot join".to_string(),
+                        };
+                        let _ = tx.send(serde_json::to_string(&err).unwrap());
+                        continue;
+                    }
+
+                    // Check for room capacity
+                    if room.is_full() {
+                        warn!(room_code = %room_code, "Player tried to join full room");
+                        let err = ServerMessage::Error {
+                            message: format!("Room is full (max {} players)", MAX_PLAYERS),
+                        };
+                        let _ = tx.send(serde_json::to_string(&err).unwrap());
+                        continue;
+                    }
+
+                    // Check for duplicate names
+                    if room.has_player_named(&trimmed_name) {
+                        warn!(room_code = %room_code, name = %trimmed_name, "Duplicate player name rejected");
+                        let err = ServerMessage::Error {
+                            message: "A player with that name is already in the room".to_string(),
+                        };
+                        let _ = tx.send(serde_json::to_string(&err).unwrap());
+                        continue;
+                    }
+
+                    let id = room.add_player(trimmed_name.clone());
+                    info!(room_code = %room_code, player_id = %id, name = %trimmed_name, "Player joined");
 
                     // Set the player's tx
                     if let Some(player) = room.get_player_mut(&id) {
@@ -255,7 +297,7 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                     // Notify host
                     let host_msg = ServerMessage::PlayerJoined {
                         player_id: id,
-                        player_name,
+                        player_name: trimmed_name,
                         player_count: room.players.len(),
                     };
                     room.send_to_host(&serde_json::to_string(&host_msg).unwrap());
@@ -274,8 +316,35 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                 if let (Some(pid), Some(code)) = (&player_id, &player_room_code) {
                     if let Some(room_arc) = state.get_room(code).await {
                         let mut room = room_arc.lock().await;
+
+                        // Validate phase
+                        if !room.phase_allows_action("night_action") {
+                            let err = ServerMessage::Error {
+                                message: "Night actions can only be performed during the night phase".to_string(),
+                            };
+                            let _ = tx.send(serde_json::to_string(&err).unwrap());
+                            continue;
+                        }
+
+                        // Prevent duplicate submissions
+                        if room.night_actions.iter().any(|a| a.actor_id == *pid) {
+                            let err = ServerMessage::Error {
+                                message: "You have already submitted your night action".to_string(),
+                            };
+                            let _ = tx.send(serde_json::to_string(&err).unwrap());
+                            continue;
+                        }
+
                         if let Some(player) = room.get_player(pid) {
+                            if !player.alive {
+                                let err = ServerMessage::Error {
+                                    message: "Dead players cannot perform actions".to_string(),
+                                };
+                                let _ = tx.send(serde_json::to_string(&err).unwrap());
+                                continue;
+                            }
                             if let Some(role) = player.role {
+                                info!(room_code = %code, player_id = %pid, role = ?role, "Night action submitted");
                                 room.night_actions.push(crate::game::phases::NightAction {
                                     actor_id: pid.clone(),
                                     role,
@@ -291,6 +360,37 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                 if let (Some(pid), Some(code)) = (&player_id, &player_room_code) {
                     if let Some(room_arc) = state.get_room(code).await {
                         let mut room = room_arc.lock().await;
+
+                        // Validate phase
+                        if !room.phase_allows_action("vote") {
+                            let err = ServerMessage::Error {
+                                message: "Voting can only be done during the voting phase".to_string(),
+                            };
+                            let _ = tx.send(serde_json::to_string(&err).unwrap());
+                            continue;
+                        }
+
+                        // Prevent duplicate votes
+                        if room.votes.contains_key(pid) {
+                            let err = ServerMessage::Error {
+                                message: "You have already cast your vote".to_string(),
+                            };
+                            let _ = tx.send(serde_json::to_string(&err).unwrap());
+                            continue;
+                        }
+
+                        // Check player is alive
+                        if let Some(player) = room.get_player(pid) {
+                            if !player.alive {
+                                let err = ServerMessage::Error {
+                                    message: "Dead players cannot vote".to_string(),
+                                };
+                                let _ = tx.send(serde_json::to_string(&err).unwrap());
+                                continue;
+                            }
+                        }
+
+                        info!(room_code = %code, player_id = %pid, "Vote cast");
                         room.votes.insert(pid.clone(), target_id);
 
                         // Broadcast vote update
@@ -317,6 +417,21 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                 if let (Some(pid), Some(code)) = (&player_id, &player_room_code) {
                     if let Some(room_arc) = state.get_room(code).await {
                         let room = room_arc.lock().await;
+
+                        // Validate phase
+                        if !room.phase_allows_action("chat") {
+                            let err = ServerMessage::Error {
+                                message: "Chat is only available during the night phase".to_string(),
+                            };
+                            let _ = tx.send(serde_json::to_string(&err).unwrap());
+                            continue;
+                        }
+
+                        // Validate message length
+                        if message.trim().is_empty() || message.len() > 500 {
+                            continue;
+                        }
+
                         if let Some(player) = room.get_player(pid) {
                             // Only mafia can chat during night
                             if let Some(role) = player.role {
@@ -341,11 +456,13 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                 }
             }
             ClientMessage::Reconnect { player_id: pid, room_code: code } => {
+                info!(room_code = %code, player_id = %pid, "Player reconnecting");
                 if let Some(room_arc) = state.get_room(&code).await {
                     let mut room = room_arc.lock().await;
 
                     let player_exists = room.get_player(&pid).is_some();
                     if !player_exists {
+                        warn!(room_code = %code, player_id = %pid, "Reconnect failed: player not found");
                         let err = ServerMessage::Error { message: "Player not found in room".to_string() };
                         let _ = tx.send(serde_json::to_string(&err).unwrap());
                         continue;
@@ -373,7 +490,7 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                     let player_alive = player.alive;
 
                     // Include vote tally if in voting phase
-                    let votes = if snapshot.phase == crate::game::state::GamePhase::Voting {
+                    let votes = if snapshot.phase == GamePhase::Voting {
                         Some(room.votes.iter().map(|(voter_id, target)| {
                             let voter_name = room.get_player(voter_id)
                                 .map(|p| p.name.clone())
@@ -403,7 +520,7 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                     let _ = tx.send(serde_json::to_string(&reconnect_msg).unwrap());
 
                     // If night phase and player has night action, send prompt
-                    if snapshot.phase == crate::game::state::GamePhase::Night
+                    if snapshot.phase == GamePhase::Night
                         && player_alive
                     {
                         if let Some(r) = role {
@@ -420,6 +537,8 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                             }
                         }
                     }
+
+                    info!(room_code = %code, player_id = %pid, player_name = %player_name, "Player reconnected");
 
                     // Notify host
                     let host_msg = ServerMessage::PlayerReconnected {
@@ -444,6 +563,7 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
 
     // Player disconnected — record timestamp for reconnection tracking
     if let (Some(pid), Some(code)) = (&player_id, &player_room_code) {
+        info!(room_code = %code, player_id = %pid, "Player disconnected");
         if let Some(room_arc) = state.get_room(code).await {
             let mut room = room_arc.lock().await;
             if let Some(player) = room.get_player_mut(pid) {
