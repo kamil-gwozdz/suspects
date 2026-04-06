@@ -1153,89 +1153,6 @@ select {
     position: fixed;
     inset: 0;
     z-index: 900;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.75);
-    pointer-events: none;
-    opacity: 1;
-    transition: opacity 0.6s ease;
-}
-
-.narration-overlay.hidden {
-    opacity: 0;
-    pointer-events: none;
-}
-
-.narration-overlay:not(.hidden) {
-    pointer-events: auto;
-}
-
-.narration-text {
-    font-size: clamp(1.8rem, 4vw, 3.2rem);
-    font-weight: 700;
-    text-align: center;
-    color: #fff;
-    max-width: 80vw;
-    line-height: 1.4;
-    letter-spacing: 0.02em;
-    text-shadow:
-        0 0 20px rgba(231, 76, 60, 0.4),
-        0 2px 8px rgba(0, 0, 0, 0.8);
-    animation: narrateFadeIn 0.6s ease both;
-}
-
-@keyframes narrateFadeIn {
-    from { opacity: 0; transform: translateY(12px) scale(0.97); }
-    to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes narrateFadeOut {
-    from { opacity: 1; transform: translateY(0) scale(1); }
-    to   { opacity: 0; transform: translateY(-12px) scale(0.97); }
-}
-
-.narration-text.fade-out {
-    animation: narrateFadeOut 0.4s ease both;
-}
-
-.narration-next-btn {
-    margin-top: 2rem;
-    font-size: 1.2rem;
-    padding: 0.8rem 2.5rem;
-    cursor: pointer;
-}
-
-.narration-next-btn.hidden {
-    display: none;
-}
-
-.narration-waiting {
-    margin-top: 1.5rem;
-    font-size: 1rem;
-    color: var(--text-dim);
-    font-style: italic;
-    animation: pulse 1.5s ease-in-out infinite;
-}
-
-.narration-waiting.hidden {
-    display: none;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 0.5; }
-    50%      { opacity: 1; }
-}
-
-/* ═══════════════════════════════════════
-   Narration Overlay (full-screen GM)
-   ═══════════════════════════════════════ */
-
-.narration-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 500;
     background: rgba(0, 0, 0, 0.85);
     display: flex;
     flex-direction: column;
@@ -1243,19 +1160,25 @@ select {
     justify-content: center;
     gap: 1.5rem;
     padding: 2rem;
+    transition: opacity 0.6s ease;
 }
 
-.narration-overlay.hidden { display: none !important; }
+.narration-overlay.hidden {
+    display: none !important;
+}
 
 .narration-text {
-    font-size: 3rem;
+    font-size: clamp(2rem, 4vw, 3.2rem);
     font-weight: 700;
-    color: #fff;
     text-align: center;
+    color: #fff;
     max-width: 80vw;
     line-height: 1.3;
     letter-spacing: 0.02em;
-    text-shadow: 0 0 30px rgba(255, 255, 255, 0.15);
+    text-shadow:
+        0 0 30px rgba(231, 76, 60, 0.35),
+        0 0 60px rgba(255, 255, 255, 0.08),
+        0 2px 8px rgba(0, 0, 0, 0.8);
     opacity: 0;
     animation: narrationFadeIn 0.6s ease forwards;
 }
@@ -1263,6 +1186,15 @@ select {
 @keyframes narrationFadeIn {
     0%   { opacity: 0; transform: translateY(12px) scale(0.97); letter-spacing: 0.15em; }
     100% { opacity: 1; transform: translateY(0) scale(1); letter-spacing: 0.02em; }
+}
+
+@keyframes narrationFadeOut {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to   { opacity: 0; transform: translateY(-12px) scale(0.97); }
+}
+
+.narration-text.fade-out {
+    animation: narrationFadeOut 0.4s ease both;
 }
 
 .narration-indicator {
@@ -1280,7 +1212,12 @@ select {
     margin-top: 1rem;
     font-size: 1.2rem;
     padding: 0.8rem 2.5rem;
+    cursor: pointer;
     animation: narrationFadeIn 0.4s ease forwards;
+}
+
+.narration-next-btn.hidden {
+    display: none;
 }
 
 /* ═══════════════════════════════════════

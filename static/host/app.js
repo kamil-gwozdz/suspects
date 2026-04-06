@@ -27,7 +27,6 @@ const volumeSlider = document.getElementById('volume-slider');
 const narrationOverlay = document.getElementById('narration-overlay');
 const narrationText = document.getElementById('narration-text');
 const narrationNextBtn = document.getElementById('narration-next-btn');
-const narrationWaiting = document.getElementById('narration-waiting');
 const gmAudio = document.getElementById('gm-audio');
 
 // Volume slider wiring
@@ -686,13 +685,22 @@ function hideMiniGameOverlay() {
 //   PlayerAction → show "Waiting for players…" indicator
 //   HostAdvance  → show "Next ▶" button for the host
 
-function handleNarrationStep({ text, audio_key, wait_type, duration_secs, subtitle }) {
+function handleNarrationStep(payload) {
+    // Support both old format (audio_key, wait_type, duration_secs, subtitle)
+    // and new script-engine format (key, text, audio_file, wait_for, target_player_id)
+    const text = payload.text || '';
+    const audioKey = payload.audio_key || null;
+    const audioFile = payload.audio_file || null;
+    const waitFor = payload.wait_for || payload.wait_type || 'Duration';
+    const subtitle = payload.subtitle || false;
+
     const overlay       = document.getElementById('narration-overlay');
     const narrationText = document.getElementById('narration-text');
     const indicator     = document.getElementById('narration-indicator');
     const nextBtn       = document.getElementById('narration-next-btn');
     const subtitleBar   = document.getElementById('narration-subtitle');
     const subtitleText  = document.getElementById('narration-subtitle-text');
+    const gmAudio       = document.getElementById('gm-audio');
 
     // Reset controls
     indicator.classList.add('hidden');
@@ -701,12 +709,12 @@ function handleNarrationStep({ text, audio_key, wait_type, duration_secs, subtit
     if (subtitle) {
         // Subtitle mode: non-blocking text at bottom
         overlay.classList.add('hidden');
-        subtitleText.textContent = text || '';
+        subtitleText.textContent = text;
         subtitleBar.classList.remove('hidden');
     } else {
         // Full overlay mode
         subtitleBar.classList.add('hidden');
-        narrationText.textContent = text || '';
+        narrationText.textContent = text;
         // Re-trigger fade-in animation
         narrationText.style.animation = 'none';
         void narrationText.offsetWidth;
@@ -714,16 +722,50 @@ function handleNarrationStep({ text, audio_key, wait_type, duration_secs, subtit
         overlay.classList.remove('hidden');
     }
 
-    // Play audio (resolves immediately if no file)
+    // Play audio — try audio_file (new format), then audio_key (old format via AudioManager)
     const audioStart = Date.now();
-    const audioPromise = audio_key ? audioManager.play(audio_key) : Promise.resolve();
+    let audioPromise;
+
+    if (audioFile && gmAudio) {
+        audioPromise = new Promise(resolve => {
+            gmAudio.src = audioFile;
+            gmAudio.onended = resolve;
+            gmAudio.onerror = resolve; // resolve even on error (file may not exist yet)
+            gmAudio.play().catch(resolve);
+        });
+    } else if (audioKey) {
+        audioPromise = audioManager.play(audioKey);
+    } else {
+        audioPromise = Promise.resolve();
+    }
 
     audioPromise.then(() => {
         const elapsed = (Date.now() - audioStart) / 1000;
-        const remaining = (duration_secs || 0) - elapsed;
 
-        switch (wait_type) {
-            case 'Duration': {
+        // Parse wait_for — can be a string like "duration" or an object like { duration: 3 }
+        let waitType, waitDuration;
+        if (typeof waitFor === 'object' && waitFor !== null) {
+            if ('duration' in waitFor) {
+                waitType = 'Duration';
+                waitDuration = waitFor.duration;
+            } else if ('player_action' in waitFor) {
+                waitType = 'PlayerAction';
+            } else if ('host_advance' in waitFor) {
+                waitType = 'HostAdvance';
+            } else {
+                waitType = Object.keys(waitFor)[0] || 'Duration';
+                waitDuration = Object.values(waitFor)[0] || 2;
+            }
+        } else {
+            waitType = waitFor;
+            waitDuration = payload.duration_secs || 2;
+        }
+
+        const remaining = (waitDuration || 0) - elapsed;
+
+        switch (waitType) {
+            case 'Duration':
+            case 'duration': {
                 const delay = Math.max(0, remaining) * 1000;
                 setTimeout(() => {
                     hideNarration();
@@ -731,12 +773,14 @@ function handleNarrationStep({ text, audio_key, wait_type, duration_secs, subtit
                 }, delay);
                 break;
             }
-            case 'PlayerAction': {
-                indicator.textContent = 'Waiting for players…';
+            case 'PlayerAction':
+            case 'player_action': {
+                indicator.textContent = 'Waiting for player…';
                 indicator.classList.remove('hidden');
                 break;
             }
-            case 'HostAdvance': {
+            case 'HostAdvance':
+            case 'host_advance': {
                 nextBtn.classList.remove('hidden');
                 nextBtn.onclick = () => {
                     nextBtn.classList.add('hidden');
@@ -746,7 +790,6 @@ function handleNarrationStep({ text, audio_key, wait_type, duration_secs, subtit
                 break;
             }
             default: {
-                // Unknown wait_type — auto-hide after a short pause
                 setTimeout(() => hideNarration(), 2000);
             }
         }
