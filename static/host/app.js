@@ -7,6 +7,13 @@ let previousVoteCounts = {};
 let currentPhase = 'lobby';
 let starsGenerated = false;
 
+// Audio manager instance
+const audioManager = new AudioManager();
+
+// Narration state
+let narrationQueue = [];
+let narrationActive = false;
+
 // DOM elements
 const lobbyScreen = document.getElementById('lobby-screen');
 const gameScreen = document.getElementById('game-screen');
@@ -16,6 +23,19 @@ const roomInfo = document.getElementById('room-info');
 const languageSelect = document.getElementById('language-select');
 const phaseOverlay = document.getElementById('phase-overlay');
 const starsLayer = document.getElementById('stars-layer');
+const volumeSlider = document.getElementById('volume-slider');
+const narrationOverlay = document.getElementById('narration-overlay');
+const narrationText = document.getElementById('narration-text');
+const narrationNextBtn = document.getElementById('narration-next-btn');
+const narrationWaiting = document.getElementById('narration-waiting');
+const gmAudio = document.getElementById('gm-audio');
+
+// Volume slider wiring
+if (volumeSlider) {
+    volumeSlider.addEventListener('input', () => {
+        audioManager.setVolume(parseFloat(volumeSlider.value));
+    });
+}
 
 createRoomBtn.addEventListener('click', () => {
     ws.send({ type: 'create_room', payload: { language: languageSelect.value } });
@@ -74,6 +94,9 @@ ws.onMessage((msg) => {
             break;
         case 'mini_game_result':
             handleMiniGameResult(msg.payload);
+            break;
+        case 'narration_step':
+            handleNarrationStep(msg.payload);
             break;
         case 'error':
             showErrorToast(msg.payload.message);
@@ -161,6 +184,9 @@ function handleRoomCreated({ room_code, room_url }) {
     
     const fullUrl = `${window.location.origin}${room_url}`;
     document.getElementById('join-url').textContent = fullUrl;
+
+    // Preload GM audio manifest (non-blocking, graceful on failure)
+    audioManager.preloadFromManifest('/audio/gm/manifest.json');
 
     // Generate QR code
     const qrContainer = document.getElementById('qr-code');
@@ -646,6 +672,93 @@ function getOrCreateMiniGameOverlay() {
 function hideMiniGameOverlay() {
     const el = document.getElementById('minigame-overlay');
     if (el) el.classList.add('hidden');
+}
+
+// ---------------------------------------------------------------------------
+// Narration Step Handler (GM voice + text)
+// ---------------------------------------------------------------------------
+// Payload shape:
+//   { text, audio_key?, wait_type: "Duration"|"PlayerAction"|"HostAdvance",
+//     duration_secs?, subtitle?: bool }
+//
+// wait_type behaviour after audio finishes:
+//   Duration     → auto-advance after max(audio length, duration_secs)
+//   PlayerAction → show "Waiting for players…" indicator
+//   HostAdvance  → show "Next ▶" button for the host
+
+function handleNarrationStep({ text, audio_key, wait_type, duration_secs, subtitle }) {
+    const overlay       = document.getElementById('narration-overlay');
+    const narrationText = document.getElementById('narration-text');
+    const indicator     = document.getElementById('narration-indicator');
+    const nextBtn       = document.getElementById('narration-next-btn');
+    const subtitleBar   = document.getElementById('narration-subtitle');
+    const subtitleText  = document.getElementById('narration-subtitle-text');
+
+    // Reset controls
+    indicator.classList.add('hidden');
+    nextBtn.classList.add('hidden');
+
+    if (subtitle) {
+        // Subtitle mode: non-blocking text at bottom
+        overlay.classList.add('hidden');
+        subtitleText.textContent = text || '';
+        subtitleBar.classList.remove('hidden');
+    } else {
+        // Full overlay mode
+        subtitleBar.classList.add('hidden');
+        narrationText.textContent = text || '';
+        // Re-trigger fade-in animation
+        narrationText.style.animation = 'none';
+        void narrationText.offsetWidth;
+        narrationText.style.animation = '';
+        overlay.classList.remove('hidden');
+    }
+
+    // Play audio (resolves immediately if no file)
+    const audioStart = Date.now();
+    const audioPromise = audio_key ? audioManager.play(audio_key) : Promise.resolve();
+
+    audioPromise.then(() => {
+        const elapsed = (Date.now() - audioStart) / 1000;
+        const remaining = (duration_secs || 0) - elapsed;
+
+        switch (wait_type) {
+            case 'Duration': {
+                const delay = Math.max(0, remaining) * 1000;
+                setTimeout(() => {
+                    hideNarration();
+                    ws.send({ type: 'advance_phase' });
+                }, delay);
+                break;
+            }
+            case 'PlayerAction': {
+                indicator.textContent = 'Waiting for players…';
+                indicator.classList.remove('hidden');
+                break;
+            }
+            case 'HostAdvance': {
+                nextBtn.classList.remove('hidden');
+                nextBtn.onclick = () => {
+                    nextBtn.classList.add('hidden');
+                    hideNarration();
+                    ws.send({ type: 'advance_phase' });
+                };
+                break;
+            }
+            default: {
+                // Unknown wait_type — auto-hide after a short pause
+                setTimeout(() => hideNarration(), 2000);
+            }
+        }
+    });
+}
+
+function hideNarration() {
+    const overlay     = document.getElementById('narration-overlay');
+    const subtitleBar = document.getElementById('narration-subtitle');
+    if (overlay) overlay.classList.add('hidden');
+    if (subtitleBar) subtitleBar.classList.add('hidden');
+    audioManager.stop();
 }
 
 function playerName(id) {

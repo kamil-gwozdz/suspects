@@ -40,8 +40,24 @@
                     <ul id="player-list"></ul>
                     <p class="player-count"><span id="player-count">0</span> / 30</p>
                 </div>
+                <div class="volume-control">
+                    <label for="volume-slider">🔊 <span data-i18n="gm_volume">GM Volume</span></label>
+                    <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.8">
+                </div>
                 <button id="start-game-btn" class="btn-primary hidden" data-i18n="start_game">Start Game</button>
             </div>
+        </div>
+
+        <!-- Narration overlay (GM voice + text) -->
+        <div id="narration-overlay" class="narration-overlay hidden">
+            <p id="narration-text" class="narration-text"></p>
+            <div id="narration-indicator" class="narration-indicator hidden"></div>
+            <button id="narration-next-btn" class="btn-primary narration-next-btn hidden">Next ▶</button>
+        </div>
+
+        <!-- Subtitle bar (non-blocking narration at bottom) -->
+        <div id="narration-subtitle" class="narration-subtitle hidden">
+            <p id="narration-subtitle-text"></p>
         </div>
 
         <!-- Phase transition overlay -->
@@ -105,6 +121,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
     <script src="/shared/ws.js"></script>
+    <script src="audio.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

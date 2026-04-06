@@ -1,0 +1,130 @@
+{
+  "night.everyone_close_eyes": {
+    "file": "night/everyone_close_eyes.mp3",
+    "text": "Everyone, close your eyes."
+  },
+  "night.escort_wakes": {
+    "file": "night/escort_wakes.mp3",
+    "text": "The Escort wakes up."
+  },
+  "night.escort_instruction": {
+    "file": "night/escort_instruction.mp3",
+    "text": "Choose someone to distract tonight."
+  },
+  "night.escort_sleeps": {
+    "file": "night/escort_sleeps.mp3",
+    "text": "The Escort goes back to sleep."
+  },
+  "night.consort_wakes": {
+    "file": "night/consort_wakes.mp3",
+    "text": "The Consort wakes up."
+  },
+  "night.consort_instruction": {
+    "file": "night/consort_instruction.mp3",
+    "text": "Choose someone to distract tonight."
+  },
+  "night.consort_sleeps": {
+    "file": "night/consort_sleeps.mp3",
+    "text": "The Consort goes back to sleep."
+  },
+  "night.mafia_wakes": {
+    "file": "night/mafia_wakes.mp3",
+    "text": "The Mafia wakes up."
+  },
+  "night.mafia_instruction": {
+    "file": "night/mafia_instruction.mp3",
+    "text": "Choose your victim."
+  },
+  "night.mafia_sleeps": {
+    "file": "night/mafia_sleeps.mp3",
+    "text": "The Mafia goes back to sleep."
+  },
+  "night.doctor_wakes": {
+    "file": "night/doctor_wakes.mp3",
+    "text": "The Doctor wakes up."
+  },
+  "night.doctor_instruction": {
+    "file": "night/doctor_instruction.mp3",
+    "text": "Choose someone to protect tonight."
+  },
+  "night.doctor_sleeps": {
+    "file": "night/doctor_sleeps.mp3",
+    "text": "The Doctor goes back to sleep."
+  },
+  "night.detective_wakes": {
+    "file": "night/detective_wakes.mp3",
+    "text": "The Detective wakes up."
+  },
+  "night.detective_instruction": {
+    "file": "night/detective_instruction.mp3",
+    "text": "Choose someone to investigate."
+  },
+  "night.detective_sleeps": {
+    "file": "night/detective_sleeps.mp3",
+    "text": "The Detective goes back to sleep."
+  },
+  "night.vigilante_wakes": {
+    "file": "night/vigilante_wakes.mp3",
+    "text": "The Vigilante wakes up."
+  },
+  "night.vigilante_instruction": {
+    "file": "night/vigilante_instruction.mp3",
+    "text": "Choose someone to shoot, or hold your fire."
+  },
+  "night.vigilante_sleeps": {
+    "file": "night/vigilante_sleeps.mp3",
+    "text": "The Vigilante goes back to sleep."
+  },
+  "night.serial_killer_wakes": {
+    "file": "night/serial_killer_wakes.mp3",
+    "text": "The Serial Killer wakes up."
+  },
+  "night.serial_killer_instruction": {
+    "file": "night/serial_killer_instruction.mp3",
+    "text": "Choose your next victim."
+  },
+  "night.serial_killer_sleeps": {
+    "file": "night/serial_killer_sleeps.mp3",
+    "text": "The Serial Killer goes back to sleep."
+  },
+  "night.witch_wakes": {
+    "file": "night/witch_wakes.mp3",
+    "text": "The Witch wakes up."
+  },
+  "night.witch_instruction": {
+    "file": "night/witch_instruction.mp3",
+    "text": "Choose someone to control, and pick their target."
+  },
+  "night.witch_sleeps": {
+    "file": "night/witch_sleeps.mp3",
+    "text": "The Witch goes back to sleep."
+  },
+  "dawn.everyone_open_eyes": {
+    "file": "dawn/everyone_open_eyes.mp3",
+    "text": "Everyone, open your eyes."
+  },
+  "dawn.no_deaths": {
+    "file": "dawn/no_deaths.mp3",
+    "text": "The town sleeps peacefully. No one was killed last night."
+  },
+  "dawn.death_announcement": {
+    "file": "dawn/death_announcement.mp3",
+    "text": "A body has been discovered."
+  },
+  "dawn.time_to_discuss": {
+    "file": "dawn/time_to_discuss.mp3",
+    "text": "Time to discuss."
+  },
+  "voting.time_to_vote": {
+    "file": "voting/time_to_vote.mp3",
+    "text": "Time to vote."
+  },
+  "voting.cast_votes": {
+    "file": "voting/cast_votes.mp3",
+    "text": "Cast your votes now."
+  },
+  "voting.votes_are_in": {
+    "file": "voting/votes_are_in.mp3",
+    "text": "The votes are in."
+  }
+}
