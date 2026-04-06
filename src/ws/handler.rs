@@ -7,8 +7,9 @@ use axum::{
 };
 use std::collections::HashMap;
 use futures::{SinkExt, StreamExt};
+use sqlx::SqlitePool;
 use tokio::sync::mpsc;
-use tracing::{info, warn, error};
+use tracing::{info, warn};
 
 use crate::rooms::manager::{AppState, Room, MAX_PLAYERS};
 use crate::ws::messages::{ClientMessage, ServerMessage, PlayerInfo};
@@ -20,6 +21,8 @@ use crate::game::narrator::{
     canonical_wake_role, role_display_name, role_instruction, WaitFor,
 };
 use crate::game::phases::resolve_night;
+use crate::db;
+use crate::db::RoomSnapshot;
 
 pub async fn host_ws_handler(
     ws: WebSocketUpgrade,
@@ -70,9 +73,16 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                     room.host_tx = Some(tx.clone());
                     room_code = Some(code.clone());
 
+                    // Persist new game to DB (fire-and-forget)
+                    {
+                        let pool = state.pool.clone();
+                        let snap = RoomSnapshot::from_room(&room);
+                        tokio::spawn(async move { db::save_game(&pool, &snap).await });
+                    }
+
                     let response = ServerMessage::RoomCreated {
                         room_code: code.clone(),
-                        room_url: format!("/player/?room={}", code),
+                        room_url: format!("/player/?room={}&lang={}", code, language),
                     };
                     let _ = tx.send(serde_json::to_string(&response).unwrap());
                 }
@@ -131,6 +141,16 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                         };
                         let _ = tx.send(serde_json::to_string(&phase_msg).unwrap());
                         room.broadcast_to_players(&serde_json::to_string(&phase_msg).unwrap());
+
+                        // Persist role assignments + phase transition
+                        {
+                            let pool = state.pool.clone();
+                            let snap = RoomSnapshot::from_room(&room);
+                            tokio::spawn(async move {
+                                db::save_phase_transition(&pool, &snap).await;
+                                db::save_all_players(&pool, &snap).await;
+                            });
+                        }
                     }
                 } else {
                     let err = ServerMessage::Error {
@@ -165,7 +185,7 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                             && room.narration_active()
                         {
                             info!(room_code = %code, "Voting timer expired, resolving votes");
-                            handle_voting_complete(&mut room);
+                            handle_voting_complete(&mut room, Some(state.pool.clone()));
                             continue;
                         }
 
@@ -190,9 +210,18 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
 
                         // Phase-specific narration flows
                         match new_phase {
-                            GamePhase::Night => start_night_narration(&mut room),
+                            GamePhase::Night => start_night_narration(&mut room, Some(state.pool.clone())),
                             GamePhase::Voting => start_voting_narration(&mut room),
                             _ => {}
+                        }
+
+                        // Persist phase transition
+                        {
+                            let pool = state.pool.clone();
+                            let snap = RoomSnapshot::from_room(&room);
+                            tokio::spawn(async move {
+                                db::save_phase_transition(&pool, &snap).await;
+                            });
                         }
                     }
                 }
@@ -201,7 +230,7 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                 if let Some(ref code) = room_code {
                     if let Some(room_arc) = state.get_room(code).await {
                         let mut room = room_arc.lock().await;
-                        advance_and_execute_narration(&mut room);
+                        advance_and_execute_narration(&mut room, Some(state.pool.clone()));
                     }
                 }
             }
@@ -322,7 +351,7 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
 
                     // Notify host
                     let host_msg = ServerMessage::PlayerJoined {
-                        player_id: id,
+                        player_id: id.clone(),
                         player_name: trimmed_name,
                         player_count: room.players.len(),
                     };
@@ -333,6 +362,22 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                         players: room.players.iter().map(|p| p.to_info()).collect(),
                     };
                     room.send_to_host(&serde_json::to_string(&list_msg).unwrap());
+
+                    // Persist new player
+                    if let Some(player) = room.get_player(&id) {
+                        let pool = state.pool.clone();
+                        let game_id = room.id.clone();
+                        let ps = db::PlayerSnapshot {
+                            id: player.id.clone(),
+                            name: player.name.clone(),
+                            role: player.role,
+                            alive: player.alive,
+                            connected: player.connected,
+                        };
+                        tokio::spawn(async move {
+                            db::save_player(&pool, &game_id, &ps).await;
+                        });
+                    }
                 } else {
                     let err = ServerMessage::Error { message: "Room not found".to_string() };
                     let _ = tx.send(serde_json::to_string(&err).unwrap());
@@ -374,9 +419,25 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                                 room.night_actions.push(crate::game::phases::NightAction {
                                     actor_id: pid.clone(),
                                     role,
-                                    target_id,
+                                    target_id: target_id.clone(),
                                     secondary_target_id,
                                 });
+
+                                // Persist night action event
+                                {
+                                    let pool = state.pool.clone();
+                                    let game_id = room.id.clone();
+                                    let round = room.game_state.round;
+                                    let phase = room.game_state.phase;
+                                    let data = serde_json::json!({
+                                        "actor_id": pid,
+                                        "role": format!("{:?}", role),
+                                        "target_id": target_id,
+                                    });
+                                    tokio::spawn(async move {
+                                        db::save_game_event(&pool, &game_id, round, phase, "night_action", &data).await;
+                                    });
+                                }
                             }
                         }
                     }
@@ -417,7 +478,22 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                         }
 
                         info!(room_code = %code, player_id = %pid, "Vote cast");
-                        room.votes.insert(pid.clone(), target_id);
+                        room.votes.insert(pid.clone(), target_id.clone());
+
+                        // Persist vote event
+                        {
+                            let pool = state.pool.clone();
+                            let game_id = room.id.clone();
+                            let round = room.game_state.round;
+                            let phase = room.game_state.phase;
+                            let data = serde_json::json!({
+                                "voter_id": pid,
+                                "target_id": target_id,
+                            });
+                            tokio::spawn(async move {
+                                db::save_game_event(&pool, &game_id, round, phase, "vote", &data).await;
+                            });
+                        }
 
                         // Broadcast vote update
                         let vote_msg = ServerMessage::VoteUpdate {
@@ -441,7 +517,7 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                         let alive_count = room.alive_players().len();
                         if room.votes.len() >= alive_count {
                             info!(room_code = %code, "All alive players voted, resolving");
-                            handle_voting_complete(&mut room);
+                            handle_voting_complete(&mut room, Some(state.pool.clone()));
                         }
                     }
                 }
@@ -610,7 +686,7 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
 
                         if room.narration_ack_pending.is_empty() {
                             // All expected acks received — advance narration
-                            advance_and_execute_narration(&mut room);
+                            advance_and_execute_narration(&mut room, Some(state.pool.clone()));
                         }
                     }
                 }
@@ -665,7 +741,7 @@ fn send_night_prompts(room: &Room) {
 }
 
 /// Build the night narration script and begin executing it.
-fn start_night_narration(room: &mut Room) {
+fn start_night_narration(room: &mut Room, pool: Option<SqlitePool>) {
     let alive_players: Vec<(String, Role)> = room.alive_players()
         .iter()
         .filter_map(|p| p.role.map(|r| (p.id.clone(), r)))
@@ -678,26 +754,26 @@ fn start_night_narration(room: &mut Room) {
         execute_narration_step(room, &step);
     } else {
         // Empty script (e.g. no night roles) — resolve immediately
-        resolve_night_and_advance_to_dawn(room);
+        resolve_night_and_advance_to_dawn(room, pool);
     }
 }
 
 /// Advance to the next narration step and execute it.
 /// If no steps remain, handle phase-specific completion.
-fn advance_and_execute_narration(room: &mut Room) {
+fn advance_and_execute_narration(room: &mut Room, pool: Option<SqlitePool>) {
     if let Some(step) = room.advance_narration() {
         execute_narration_step(room, &step);
     } else {
-        on_narration_complete(room);
+        on_narration_complete(room, pool);
     }
 }
 
 /// Called when the last narration step has been completed.
-fn on_narration_complete(room: &mut Room) {
+fn on_narration_complete(room: &mut Room, pool: Option<SqlitePool>) {
     match room.game_state.phase {
-        GamePhase::Night => resolve_night_and_advance_to_dawn(room),
-        GamePhase::Dawn => transition_dawn_to_day(room),
-        GamePhase::Voting => transition_voting_to_execution(room),
+        GamePhase::Night => resolve_night_and_advance_to_dawn(room, pool),
+        GamePhase::Dawn => transition_dawn_to_day(room, pool),
+        GamePhase::Voting => transition_voting_to_execution(room, pool),
         _ => {}
     }
 }
@@ -768,8 +844,19 @@ fn execute_narration_step(room: &mut Room, step: &crate::game::narrator::Narrati
     }
 }
 
+/// Helper: spawn persistence for a phase transition + player state update.
+fn spawn_persist_phase(pool: &Option<SqlitePool>, room: &Room) {
+    if let Some(pool) = pool.clone() {
+        let snap = RoomSnapshot::from_room(room);
+        tokio::spawn(async move {
+            db::save_phase_transition(&pool, &snap).await;
+            db::save_all_players(&pool, &snap).await;
+        });
+    }
+}
+
 /// Resolve all night actions, apply results, and transition to Dawn.
-fn resolve_night_and_advance_to_dawn(room: &mut Room) {
+fn resolve_night_and_advance_to_dawn(room: &mut Room, pool: Option<SqlitePool>) {
     let alive_map: HashMap<String, Role> = room.alive_players()
         .iter()
         .filter_map(|p| p.role.map(|r| (p.id.clone(), r)))
@@ -806,6 +893,26 @@ fn resolve_night_and_advance_to_dawn(room: &mut Room) {
         }
     }
 
+    // Persist night resolution events (kills, heals)
+    if let Some(ref p) = pool {
+        let p = p.clone();
+        let game_id = room.id.clone();
+        let round = room.game_state.round;
+        let phase = room.game_state.phase;
+        let killed = result.killed.clone();
+        let healed = result.healed.clone();
+        tokio::spawn(async move {
+            for kid in &killed {
+                let data = serde_json::json!({ "player_id": kid });
+                db::save_game_event(&p, &game_id, round, phase, "kill", &data).await;
+            }
+            for hid in &healed {
+                let data = serde_json::json!({ "player_id": hid });
+                db::save_game_event(&p, &game_id, round, phase, "heal", &data).await;
+            }
+        });
+    }
+
     // Send night results to host
     let killed_info: Vec<PlayerInfo> = killed_ids
         .iter()
@@ -835,6 +942,9 @@ fn resolve_night_and_advance_to_dawn(room: &mut Room) {
     room.send_to_host(&json);
     room.broadcast_to_players(&json);
 
+    // Persist phase transition + player deaths
+    spawn_persist_phase(&pool, room);
+
     // Send alive player list (reflects deaths)
     let alive_msg = ServerMessage::AlivePlayerList {
         players: room.players.iter().map(|p| p.to_info()).collect(),
@@ -854,12 +964,12 @@ fn resolve_night_and_advance_to_dawn(room: &mut Room) {
         execute_narration_step(room, &step);
     } else {
         // Empty script — go straight to Day
-        transition_dawn_to_day(room);
+        transition_dawn_to_day(room, pool);
     }
 }
 
 /// Transition Dawn → Day with discussion timer.
-fn transition_dawn_to_day(room: &mut Room) {
+fn transition_dawn_to_day(room: &mut Room, pool: Option<SqlitePool>) {
     room.clear_narration();
     let new_phase = room.game_state.next_phase(); // Dawn → Day
     info!(phase = ?new_phase, round = room.game_state.round, "Dawn narration complete, advancing to Day");
@@ -873,6 +983,8 @@ fn transition_dawn_to_day(room: &mut Room) {
     let json = serde_json::to_string(&phase_msg).unwrap();
     room.send_to_host(&json);
     room.broadcast_to_players(&json);
+
+    spawn_persist_phase(&pool, room);
 }
 
 /// Build the voting narration script and begin executing it.
@@ -887,8 +999,8 @@ fn start_voting_narration(room: &mut Room) {
 }
 
 /// Resolve votes, send results, and advance narration to the final step.
-fn handle_voting_complete(room: &mut Room) {
-    resolve_and_send_vote_result(room);
+fn handle_voting_complete(room: &mut Room, pool: Option<SqlitePool>) {
+    resolve_and_send_vote_result(room, &pool);
 
     // Advance narration past the current "cast_votes" step to "votes_are_in"
     if room.narration_active() {
@@ -906,11 +1018,11 @@ fn handle_voting_complete(room: &mut Room) {
     }
 
     // No narration left — transition directly
-    transition_voting_to_execution(room);
+    transition_voting_to_execution(room, pool);
 }
 
 /// Transition Voting → Execution.
-fn transition_voting_to_execution(room: &mut Room) {
+fn transition_voting_to_execution(room: &mut Room, pool: Option<SqlitePool>) {
     room.clear_narration();
     let new_phase = room.game_state.next_phase(); // Voting → Execution
     info!(phase = ?new_phase, round = room.game_state.round, "Voting complete, advancing to Execution");
@@ -931,10 +1043,12 @@ fn transition_voting_to_execution(room: &mut Room) {
     let alive_json = serde_json::to_string(&alive_msg).unwrap();
     room.send_to_host(&alive_json);
     room.broadcast_to_players(&alive_json);
+
+    spawn_persist_phase(&pool, room);
 }
 
 /// Count votes, determine the outcome, mark the lynched player dead, and broadcast results.
-fn resolve_and_send_vote_result(room: &mut Room) {
+fn resolve_and_send_vote_result(room: &mut Room, pool: &Option<SqlitePool>) {
     let mut vote_counts: HashMap<String, usize> = HashMap::new();
     for target in room.votes.values().flatten() {
         *vote_counts.entry(target.clone()).or_insert(0) += 1;
@@ -957,6 +1071,23 @@ fn resolve_and_send_vote_result(room: &mut Room) {
         if let Some(player) = room.get_player_mut(target_id) {
             player.alive = false;
         }
+
+        // Persist lynch event
+        if let Some(p) = pool {
+            let p = p.clone();
+            let game_id = room.id.clone();
+            let round = room.game_state.round;
+            let phase = room.game_state.phase;
+            let data = serde_json::json!({
+                "lynched_id": target_id,
+                "lynched_name": target_name,
+                "vote_counts": vote_counts.iter().map(|(k, v)| (k.clone(), *v)).collect::<HashMap<String, usize>>(),
+            });
+            tokio::spawn(async move {
+                db::save_game_event(&p, &game_id, round, phase, "lynch", &data).await;
+            });
+        }
+
         (
             Some(PlayerInfo {
                 id: target_id.clone(),

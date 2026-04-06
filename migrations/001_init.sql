@@ -1,8 +1,12 @@
 CREATE TABLE IF NOT EXISTS games (
     id TEXT PRIMARY KEY,
     room_code TEXT NOT NULL UNIQUE,
-    state TEXT NOT NULL DEFAULT 'lobby',
-    config TEXT NOT NULL DEFAULT '{}',
+    phase TEXT NOT NULL DEFAULT 'lobby',
+    round INTEGER NOT NULL DEFAULT 0,
+    language TEXT NOT NULL DEFAULT 'en',
+    day_timer_secs INTEGER NOT NULL DEFAULT 300,
+    night_timer_secs INTEGER NOT NULL DEFAULT 60,
+    voting_timer_secs INTEGER NOT NULL DEFAULT 60,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

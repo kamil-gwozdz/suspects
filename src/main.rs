@@ -83,7 +83,21 @@ async fn main() {
 
     db::run_migrations(&pool).await;
 
-    let app_state = rooms::manager::AppState::new(pool);
+    let app_state = rooms::manager::AppState::new(pool.clone());
+
+    // Restore in-progress games from the database (best-effort)
+    {
+        let loaded = db::load_active_games(&pool).await;
+        if !loaded.is_empty() {
+            tracing::info!(count = loaded.len(), "Restoring in-progress games from database");
+            for game in loaded {
+                let code = game.code.clone();
+                let room = rooms::manager::Room::from_loaded(game);
+                app_state.restore_room(room).await;
+                tracing::info!(room_code = %code, "Restored game room");
+            }
+        }
+    }
 
     // Spawn background task to clean up abandoned rooms every 5 minutes
     {

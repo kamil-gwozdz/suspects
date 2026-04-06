@@ -77,6 +77,43 @@ impl Room {
         }
     }
 
+    /// Reconstruct a Room from persisted DB data (server restart recovery).
+    pub fn from_loaded(loaded: crate::db::LoadedGame) -> Self {
+        let players: Vec<Player> = loaded.players.into_iter().map(|lp| {
+            Player {
+                id: lp.id,
+                name: lp.name,
+                role: lp.role,
+                alive: lp.alive,
+                connected: false,
+                disconnected_at: Some(Instant::now()),
+                tx: None,
+            }
+        }).collect();
+
+        Self {
+            id: loaded.id,
+            code: loaded.code,
+            language: loaded.language,
+            game_state: GameState {
+                phase: loaded.phase,
+                round: loaded.round,
+                day_timer_secs: loaded.day_timer_secs,
+                night_timer_secs: loaded.night_timer_secs,
+                voting_timer_secs: loaded.voting_timer_secs,
+            },
+            players,
+            host_tx: None,
+            votes: HashMap::new(),
+            night_actions: Vec::new(),
+            created_at: Instant::now(),
+            host_disconnected_at: Some(Instant::now()),
+            narration_queue: Vec::new(),
+            narration_current: None,
+            narration_ack_pending: HashSet::new(),
+        }
+    }
+
     pub fn add_player(&mut self, name: String) -> String {
         let id = Uuid::new_v4().to_string();
         self.players.push(Player {
@@ -239,6 +276,14 @@ impl AppState {
 
     pub async fn create_room(&self, language: String) -> String {
         let room = Room::new(language);
+        let code = room.code.clone();
+        let mut rooms = self.rooms.write().await;
+        rooms.insert(code.clone(), Arc::new(Mutex::new(room)));
+        code
+    }
+
+    /// Restore a room from persisted DB state (used during server startup).
+    pub async fn restore_room(&self, room: Room) -> String {
         let code = room.code.clone();
         let mut rooms = self.rooms.write().await;
         rooms.insert(code.clone(), Arc::new(Mutex::new(room)));
