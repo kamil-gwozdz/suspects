@@ -383,6 +383,54 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                     let _ = tx.send(serde_json::to_string(&err).unwrap());
                 }
             }
+            ClientMessage::PlayerReady { ready } => {
+                if let (Some(pid), Some(code)) = (&player_id, &player_room_code) {
+                    if let Some(room_arc) = state.get_room(code).await {
+                        let mut room = room_arc.lock().await;
+
+                        if room.game_state.phase != GamePhase::Lobby {
+                            let err = ServerMessage::Error {
+                                message: "Can only toggle ready in lobby".to_string(),
+                            };
+                            let _ = tx.send(serde_json::to_string(&err).unwrap());
+                            continue;
+                        }
+
+                        let player_name = if let Some(player) = room.get_player_mut(pid) {
+                            player.ready = ready;
+                            player.name.clone()
+                        } else {
+                            continue;
+                        };
+
+                        // Notify host of ready state change
+                        let update_msg = ServerMessage::PlayerReadyUpdate {
+                            player_id: pid.clone(),
+                            player_name,
+                            ready,
+                        };
+                        room.send_to_host(&serde_json::to_string(&update_msg).unwrap());
+
+                        // Send updated player list to host
+                        let list_msg = ServerMessage::PlayerList {
+                            players: room.players.iter().map(|p| p.to_info()).collect(),
+                        };
+                        room.send_to_host(&serde_json::to_string(&list_msg).unwrap());
+
+                        // Check if all players are ready for auto-start
+                        if room.all_players_ready() {
+                            let countdown_msg = ServerMessage::AutoStartCountdown { seconds: 5 };
+                            room.send_to_host(&serde_json::to_string(&countdown_msg).unwrap());
+                            room.broadcast_to_players(&serde_json::to_string(&countdown_msg).unwrap());
+                        } else if !ready {
+                            // Player un-readied — cancel any active countdown
+                            let cancel_msg = ServerMessage::AutoStartCancelled;
+                            room.send_to_host(&serde_json::to_string(&cancel_msg).unwrap());
+                            room.broadcast_to_players(&serde_json::to_string(&cancel_msg).unwrap());
+                        }
+                    }
+                }
+            }
             ClientMessage::NightAction { target_id, secondary_target_id } => {
                 if let (Some(pid), Some(code)) = (&player_id, &player_room_code) {
                     if let Some(room_arc) = state.get_room(code).await {
@@ -1093,6 +1141,7 @@ fn resolve_and_send_vote_result(room: &mut Room, pool: &Option<SqlitePool>) {
                 id: target_id.clone(),
                 name: target_name,
                 alive: false,
+                ready: false,
             }),
             true,
         )

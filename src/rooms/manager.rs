@@ -21,6 +21,7 @@ pub struct Player {
     pub name: String,
     pub role: Option<Role>,
     pub alive: bool,
+    pub ready: bool,
     pub connected: bool,
     pub disconnected_at: Option<Instant>,
     pub tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
@@ -32,6 +33,7 @@ impl Player {
             id: self.id.clone(),
             name: self.name.clone(),
             alive: self.alive,
+            ready: self.ready,
         }
     }
 }
@@ -85,6 +87,7 @@ impl Room {
                 name: lp.name,
                 role: lp.role,
                 alive: lp.alive,
+                ready: false,
                 connected: false,
                 disconnected_at: Some(Instant::now()),
                 tx: None,
@@ -121,6 +124,7 @@ impl Room {
             name,
             role: None,
             alive: true,
+            ready: false,
             connected: true,
             disconnected_at: None,
             tx: None,
@@ -158,6 +162,11 @@ impl Room {
     /// Returns `true` if the room has reached the maximum player capacity.
     pub fn is_full(&self) -> bool {
         self.players.len() >= MAX_PLAYERS
+    }
+
+    /// Returns `true` if there are at least 6 players and all are ready.
+    pub fn all_players_ready(&self) -> bool {
+        self.players.len() >= 6 && self.players.iter().all(|p| p.ready)
     }
 
     /// Returns `true` if a player with the given name (case-insensitive) already exists.

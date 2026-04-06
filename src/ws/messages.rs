@@ -19,6 +19,8 @@ pub enum ClientMessage {
     NightAction { target_id: Option<String>, secondary_target_id: Option<String> },
     /// Player casts a vote during day
     Vote { target_id: Option<String> },
+    /// Player toggles ready state
+    PlayerReady { ready: bool },
     /// Player sends a chat message (mafia night chat)
     Chat { message: String },
     /// Host advances to next phase manually
@@ -90,6 +92,12 @@ pub enum ServerMessage {
     MiniGamePrompt { game_type: MiniGameType, prompt: serde_json::Value },
     /// Mini-game result (sent to host for display)
     MiniGameResult { game_type: MiniGameType, result: serde_json::Value },
+    /// Player ready state changed (broadcast to host)
+    PlayerReadyUpdate { player_id: String, player_name: String, ready: bool },
+    /// All players ready — game auto-starting in N seconds
+    AutoStartCountdown { seconds: u32 },
+    /// Auto-start cancelled (a player un-readied)
+    AutoStartCancelled,
     /// Narration step — sent to host to display text and play audio
     NarrationStep {
         key: String,
@@ -109,6 +117,8 @@ pub struct PlayerInfo {
     pub id: String,
     pub name: String,
     pub alive: bool,
+    #[serde(default)]
+    pub ready: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
