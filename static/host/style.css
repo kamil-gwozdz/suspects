@@ -275,10 +275,13 @@ select {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+    z-index: 2;
 }
 
 .phase-view {
     text-align: center;
+    animation: phaseEnter 0.8s ease-out;
 }
 
 .phase-view h2 {
@@ -290,10 +293,166 @@ select {
     margin-bottom: 1rem;
 }
 
+/* Narration text */
+.narration {
+    font-size: 1.2rem;
+    color: var(--text-dim);
+    font-style: italic;
+    animation: narratFade 1.5s ease-out;
+}
+
+@keyframes narratFade {
+    from { opacity: 0; letter-spacing: 0.3em; }
+    to { opacity: 1; letter-spacing: normal; }
+}
+
+@keyframes phaseEnter {
+    from { opacity: 0; transform: scale(0.9) translateY(20px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── Night Phase ── */
+.moon-icon {
+    animation: moonFloat 4s ease-in-out infinite;
+    filter: drop-shadow(0 0 20px rgba(200, 200, 255, 0.4));
+}
+
+@keyframes moonFloat {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-12px) scale(1.05); }
+}
+
+#night-view h2 {
+    color: #b8c0ff;
+    text-shadow: 0 0 30px rgba(184, 192, 255, 0.3);
+}
+
+/* ── Dawn Phase — Death Announcements ── */
+#dawn-view .sun-icon {
+    animation: sunRise 2s ease-out forwards;
+}
+
+@keyframes sunRise {
+    from { transform: translateY(40px); opacity: 0.3; filter: brightness(0.5); }
+    to { transform: translateY(0); opacity: 1; filter: brightness(1); }
+}
+
+#dawn-view h2 {
+    color: #e8a87c;
+    text-shadow: 0 0 20px rgba(232, 168, 124, 0.3);
+}
+
+#death-announcements {
+    margin-top: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.death-announcement {
+    background: linear-gradient(135deg, rgba(139,0,0,0.3) 0%, rgba(20,20,31,0.8) 100%);
+    border: 1px solid rgba(139,0,0,0.5);
+    border-radius: 12px;
+    padding: 1rem 2.5rem 1rem 3.5rem;
+    font-size: 1.3rem;
+    opacity: 0;
+    transform: translateY(30px) scale(0.8);
+    animation: deathReveal 0.8s ease-out forwards;
+    animation-delay: var(--reveal-delay, 0s);
+    position: relative;
+    overflow: hidden;
+}
+
+.death-announcement::before {
+    content: '💀';
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.5rem;
+    opacity: 0;
+    animation: skullAppear 0.4s ease-out forwards;
+    animation-delay: calc(var(--reveal-delay, 0s) + 0.5s);
+}
+
+.death-announcement::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(139,0,0,0.15), transparent);
+    animation: bloodSweep 1.5s ease-out forwards;
+    animation-delay: var(--reveal-delay, 0s);
+}
+
+@keyframes deathReveal {
+    0% { opacity: 0; transform: translateY(30px) scale(0.8); }
+    60% { opacity: 1; transform: translateY(-5px) scale(1.02); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes skullAppear {
+    from { opacity: 0; transform: translateY(-50%) scale(0.3) rotate(-20deg); }
+    to { opacity: 1; transform: translateY(-50%) scale(1) rotate(0); }
+}
+
+@keyframes bloodSweep {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(100%); }
+}
+
+.death-name {
+    color: var(--accent);
+    font-weight: bold;
+    font-size: 1.5rem;
+    text-shadow: 0 0 10px var(--accent-glow);
+}
+
+.no-deaths {
+    color: #7ec8a0;
+    font-size: 1.3rem;
+    font-style: italic;
+    animation: peacefulFade 1s ease-out;
+    text-shadow: 0 0 15px rgba(126, 200, 160, 0.3);
+}
+
+@keyframes peacefulFade {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+/* ── Day Phase ── */
+#day-view .sun-icon {
+    animation: sunPulse 3s ease-in-out infinite;
+    filter: drop-shadow(0 0 25px rgba(255, 200, 50, 0.5));
+}
+
+@keyframes sunPulse {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 25px rgba(255, 200, 50, 0.5)); }
+    50% { transform: scale(1.08); filter: drop-shadow(0 0 40px rgba(255, 200, 50, 0.7)); }
+}
+
+#day-view h2 {
+    color: #f0d060;
+    text-shadow: 0 0 20px rgba(240, 208, 96, 0.3);
+}
+
 .alive-players {
-    background: var(--bg-card);
+    background: rgba(20, 20, 31, 0.85);
+    backdrop-filter: blur(8px);
     padding: 1rem 2rem;
     width: 100%;
+    z-index: 2;
+    transition: background 0.5s ease;
+}
+
+.alive-players h3 {
+    text-align: center;
+    margin: 0 0 0.5rem 0;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
 }
 
 .alive-players ul {
@@ -302,19 +461,54 @@ select {
     gap: 0.5rem;
     list-style: none;
     padding: 0;
+    margin: 0;
     justify-content: center;
 }
 
 .alive-players li {
-    background: #1a1a2e;
+    background: rgba(26, 26, 46, 0.8);
     padding: 0.4rem 1rem;
     border-radius: 20px;
     font-size: 0.9rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.6s ease;
+}
+
+.alive-players li.alive-enter {
+    animation: aliveEnter 0.4s ease-out;
+}
+
+@keyframes aliveEnter {
+    from { opacity: 0; transform: scale(0.7); }
+    to { opacity: 1; transform: scale(1); }
 }
 
 .alive-players li.dead {
-    opacity: 0.3;
+    opacity: 0.25;
     text-decoration: line-through;
+    background: rgba(139, 0, 0, 0.15);
+    border-color: rgba(139, 0, 0, 0.2);
+    transform: scale(0.9);
+}
+
+.alive-players li.just-died {
+    animation: playerDeath 1s ease-out forwards;
+}
+
+@keyframes playerDeath {
+    0% { opacity: 1; background: rgba(26, 26, 46, 0.8); transform: scale(1); }
+    30% { background: rgba(200, 0, 0, 0.4); transform: scale(1.1); }
+    100% { opacity: 0.25; background: rgba(139, 0, 0, 0.15); transform: scale(0.9); text-decoration: line-through; }
+}
+
+/* ── Voting Phase Atmosphere ── */
+#voting-view h2 {
+    animation: voteTextPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes voteTextPulse {
+    0%, 100% { text-shadow: 0 0 10px var(--accent-glow); }
+    50% { text-shadow: 0 0 40px var(--accent-glow), 0 0 80px rgba(231,76,60,0.15); }
 }
 
 /* ── Voting Header ── */
@@ -591,7 +785,34 @@ select {
     to { opacity: 1; transform: translateY(0); }
 }
 
-#gameover-view h2 { color: var(--gold); }
+/* ── Game Over — Golden Victory ── */
+#gameover-view {
+    animation: victoryEnter 1.5s ease-out;
+}
+
+#gameover-view h2 {
+    color: var(--gold);
+    font-size: 3.5rem;
+    text-shadow:
+        0 0 20px rgba(241, 196, 15, 0.5),
+        0 0 60px rgba(241, 196, 15, 0.2);
+    animation: goldenPulse 2s ease-in-out infinite;
+}
+
+@keyframes victoryEnter {
+    0% { opacity: 0; transform: scale(0.5); }
+    60% { opacity: 1; transform: scale(1.05); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes goldenPulse {
+    0%, 100% {
+        text-shadow: 0 0 20px rgba(241,196,15,0.5), 0 0 60px rgba(241,196,15,0.2);
+    }
+    50% {
+        text-shadow: 0 0 40px rgba(241,196,15,0.7), 0 0 100px rgba(241,196,15,0.3), 0 0 150px rgba(241,196,15,0.1);
+    }
+}
 
 #role-reveals {
     display: flex;
@@ -602,12 +823,282 @@ select {
 }
 
 .role-reveal-card {
-    background: var(--bg-card);
-    padding: 1rem;
-    border-radius: 8px;
+    background: linear-gradient(135deg, var(--bg-card) 0%, #1a1a30 100%);
+    padding: 1.2rem 1.5rem;
+    border-radius: 12px;
     min-width: 150px;
+    text-align: center;
+    border: 1px solid #2a2a3e;
+    opacity: 0;
+    animation: cardReveal 0.5s ease-out forwards;
+    animation-delay: var(--card-delay, 0s);
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.role-reveal-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes cardReveal {
+    from { opacity: 0; transform: rotateY(90deg) scale(0.8); }
+    to { opacity: 1; transform: rotateY(0) scale(1); }
+}
+
+.role-reveal-card.dead {
+    opacity: 0;
+    animation: cardRevealDead 0.5s ease-out forwards;
+    animation-delay: var(--card-delay, 0s);
+}
+
+@keyframes cardRevealDead {
+    from { opacity: 0; transform: rotateY(90deg) scale(0.8); }
+    to { opacity: 0.45; transform: rotateY(0) scale(1); }
+}
+
+.role-reveal-card .player-name {
+    font-size: 1.1rem;
+    margin-bottom: 0.3rem;
+}
+
+.role-reveal-card .role-name { color: var(--accent); font-weight: bold; font-size: 1.2rem; }
+
+/* ====== Mini-game overlay (host) ====== */
+
+.minigame-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(10, 10, 15, 0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: mgFadeIn 0.4s ease;
+}
+
+.minigame-overlay.hidden { display: none !important; }
+
+@keyframes mgFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.minigame-enter .mg-card {
+    animation: mgSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes mgSlideUp {
+    from { opacity: 0; transform: translateY(40px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.mg-card {
+    background: var(--bg-card);
+    border: 2px solid var(--accent);
+    border-radius: 16px;
+    padding: 2.5rem 3rem;
+    max-width: 700px;
+    width: 90vw;
     text-align: center;
 }
 
-.role-reveal-card.dead { opacity: 0.5; }
-.role-reveal-card .role-name { color: var(--accent); font-weight: bold; }
+.mg-title {
+    font-size: 2rem;
+    color: var(--gold);
+    margin-bottom: 0.5rem;
+}
+
+.mg-desc {
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    margin-bottom: 1.5rem;
+}
+
+.mg-subtitle {
+    color: var(--text-dim);
+    font-size: 0.95rem;
+    margin-bottom: 1rem;
+}
+
+.mg-participants {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+
+.mg-participant {
+    background: rgba(231, 76, 60, 0.15);
+    border: 1px solid var(--accent);
+    padding: 0.4rem 1rem;
+    border-radius: 20px;
+    font-size: 1rem;
+}
+
+.mg-waiting-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #333;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 1rem auto 0.5rem;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.mg-waiting-text { color: var(--text-dim); font-size: 0.9rem; }
+
+/* Prisoner's Dilemma result */
+.mg-pd-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    margin: 1.5rem auto;
+    max-width: 400px;
+}
+
+.mg-pd-cell { padding: 0.8rem; border-radius: 8px; }
+.mg-pd-header { color: var(--gold); font-weight: bold; font-size: 1.1rem; }
+
+.mg-pd-outcome {
+    grid-column: span 2;
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.mg-pd-choices {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    font-size: 1.2rem;
+}
+
+.mg-pd-scores {
+    display: flex;
+    gap: 2rem;
+    justify-content: center;
+    margin-top: 1.5rem;
+}
+
+.mg-pd-score {
+    font-size: 1.2rem;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+}
+
+.mg-pd-score.positive { background: rgba(46, 204, 113, 0.15); color: #2ecc71; }
+.mg-pd-score.negative { background: rgba(231, 76, 60, 0.15); color: var(--accent); }
+
+/* Trust Circle chart */
+.mg-tc-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-top: 1rem;
+}
+
+.mg-tc-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.mg-tc-name {
+    width: 120px;
+    text-align: right;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.mg-tc-fill-track {
+    flex: 1;
+    height: 24px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.mg-tc-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3498db, #2ecc71);
+    border-radius: 4px;
+    transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mg-tc-rank {
+    width: 40px;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+}
+
+/* Alibi Challenge result */
+.mg-spotlight-name {
+    font-size: 2rem;
+    color: var(--gold);
+    margin: 0.5rem 0 1.5rem;
+}
+
+.mg-alibi-bars {
+    display: flex;
+    height: 60px;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.mg-alibi-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    font-weight: bold;
+    transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    min-width: 60px;
+}
+
+.mg-alibi-bar.up { background: rgba(46, 204, 113, 0.3); color: #2ecc71; }
+.mg-alibi-bar.down { background: rgba(231, 76, 60, 0.3); color: var(--accent); }
+
+.mg-alibi-verdict {
+    font-size: 1.1rem;
+    margin-top: 0.5rem;
+}
+
+/* Interrogation result */
+.mg-int-players {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin: 1rem 0 1.5rem;
+    font-size: 1.1rem;
+}
+
+.mg-int-role { color: var(--gold); font-weight: bold; }
+.mg-int-vs { color: var(--text-dim); font-style: italic; }
+
+.mg-int-transcript {
+    text-align: left;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.mg-int-qa {
+    margin-bottom: 1rem;
+    padding: 0.8rem;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    animation: mgFadeIn 0.3s ease;
+}
+
+.mg-int-q { font-size: 1.05rem; margin-bottom: 0.3rem; }
+.mg-int-num { color: var(--accent); font-weight: bold; margin-right: 0.4rem; }
+.mg-int-a { font-size: 1.1rem; font-weight: bold; padding-left: 1.8rem; }
+.mg-int-a.yes { color: #2ecc71; }
+.mg-int-a.no { color: var(--accent); }

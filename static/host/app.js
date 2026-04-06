@@ -4,6 +4,8 @@ let players = [];
 let alivePlayers = [];
 let timerInterval = null;
 let previousVoteCounts = {};
+let currentPhase = 'lobby';
+let starsGenerated = false;
 
 // DOM elements
 const lobbyScreen = document.getElementById('lobby-screen');
@@ -12,6 +14,8 @@ const createRoomBtn = document.getElementById('create-room-btn');
 const startGameBtn = document.getElementById('start-game-btn');
 const roomInfo = document.getElementById('room-info');
 const languageSelect = document.getElementById('language-select');
+const phaseOverlay = document.getElementById('phase-overlay');
+const starsLayer = document.getElementById('stars-layer');
 
 createRoomBtn.addEventListener('click', () => {
     ws.send({ type: 'create_room', payload: { language: languageSelect.value } });
@@ -54,11 +58,85 @@ ws.onMessage((msg) => {
         case 'game_over':
             handleGameOver(msg.payload);
             break;
+        case 'mini_game_start':
+            handleMiniGameStart(msg.payload);
+            break;
+        case 'mini_game_result':
+            handleMiniGameResult(msg.payload);
+            break;
         case 'error':
             showError(msg.payload.message);
             break;
     }
 });
+
+// ═══════════════════════════════════════
+// Stars Generation
+// ═══════════════════════════════════════
+
+function generateStars() {
+    if (starsGenerated) return;
+    starsGenerated = true;
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < 80; i++) {
+        const star = document.createElement('div');
+        star.className = i % 7 === 0 ? 'star bright' : 'star';
+        star.style.left = Math.random() * 100 + '%';
+        star.style.top = Math.random() * 60 + '%';
+        star.style.setProperty('--duration', (2 + Math.random() * 4) + 's');
+        star.style.setProperty('--delay', (Math.random() * 5) + 's');
+        frag.appendChild(star);
+    }
+    starsLayer.appendChild(frag);
+}
+
+// ═══════════════════════════════════════
+// Phase Transition Overlay
+// ═══════════════════════════════════════
+
+function playPhaseTransition(phase) {
+    const transitionClass = {
+        night: 'night-transition',
+        dawn: 'dawn-transition',
+        voting: 'voting-transition',
+        execution: 'execution-transition',
+        game_over: 'gameover-transition',
+    }[phase];
+
+    if (!transitionClass || !phaseOverlay) return Promise.resolve();
+
+    return new Promise(resolve => {
+        phaseOverlay.className = 'phase-overlay ' + transitionClass;
+        phaseOverlay.classList.add('active');
+
+        setTimeout(() => {
+            phaseOverlay.classList.remove('active');
+            setTimeout(() => {
+                phaseOverlay.className = 'phase-overlay';
+                resolve();
+            }, 800);
+        }, 1200);
+    });
+}
+
+// ═══════════════════════════════════════
+// Phase Atmosphere
+// ═══════════════════════════════════════
+
+function setPhaseAtmosphere(phase) {
+    gameScreen.className = gameScreen.className
+        .replace(/\bphase-\S+/g, '')
+        .trim();
+    gameScreen.classList.add('screen', 'active', `phase-${phase}`);
+
+    // Stars: visible during night and dawn
+    if (phase === 'night' || phase === 'dawn') {
+        generateStars();
+        starsLayer.classList.add('visible');
+    } else {
+        starsLayer.classList.remove('visible');
+    }
+}
 
 function handleRoomCreated({ room_code, room_url }) {
     roomCode = room_code;
@@ -102,6 +180,9 @@ function updatePlayerListUI() {
 }
 
 function handlePhaseChanged({ phase, round, timer_secs }) {
+    const previousPhase = currentPhase;
+    currentPhase = phase;
+
     if (phase !== 'lobby' && phase !== 'role_reveal') {
         lobbyScreen.classList.remove('active');
         gameScreen.classList.add('active');
@@ -109,6 +190,14 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
 
     document.getElementById('round-number').textContent = round;
     document.getElementById('phase-display').textContent = formatPhase(phase);
+
+    // Play transition overlay then finalize atmosphere
+    playPhaseTransition(phase).then(() => {
+        setPhaseAtmosphere(phase);
+    });
+
+    // Set atmosphere immediately (overlay is cosmetic)
+    setPhaseAtmosphere(phase);
 
     // Show appropriate view
     document.querySelectorAll('.phase-view').forEach(el => el.classList.add('hidden'));
@@ -131,6 +220,9 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
         if (counter) counter.textContent = '';
     }
 
+    // Hide mini-game overlay when phase changes
+    hideMiniGameOverlay();
+
     // Start timer
     if (timer_secs > 0) startTimer(timer_secs);
 }
@@ -140,13 +232,20 @@ function handleNightResults({ killed, saved, events }) {
     container.innerHTML = '';
 
     if (killed.length === 0) {
-        container.innerHTML = '<p class="no-deaths">No one was killed last night.</p>';
+        const p = document.createElement('p');
+        p.className = 'no-deaths';
+        p.textContent = 'The town sleeps peacefully. No one was killed last night.';
+        container.appendChild(p);
     } else {
-        killed.forEach(p => {
+        killed.forEach((p, index) => {
             const el = document.createElement('div');
             el.className = 'death-announcement';
+            el.style.setProperty('--reveal-delay', (index * 1.2) + 's');
             el.innerHTML = `<span class="death-name">${escapeHtml(p.name)}</span> was found dead.`;
             container.appendChild(el);
+
+            // Mark them in alive list with staggered delay
+            setTimeout(() => markPlayerDead(p.id), (index * 1200) + 800);
         });
     }
 }
@@ -279,6 +378,7 @@ function handleVoteResult({ target, was_lynched }) {
                 revealName.classList.add('eliminated');
                 revealSubtitle.textContent = 'The town has spoken.';
                 revealSubtitle.classList.add('eliminated');
+                markPlayerDead(target.id);
             } else {
                 revealLabel.textContent = 'No Majority';
                 revealName.textContent = '—';
@@ -291,26 +391,254 @@ function handleVoteResult({ target, was_lynched }) {
 }
 
 function handleAlivePlayerList({ players: aliveList }) {
+    const previouslyAlive = new Set(alivePlayers.filter(p => p.alive).map(p => p.id));
     alivePlayers = aliveList;
+    updateAliveListUI(previouslyAlive);
+}
+
+function updateAliveListUI(previouslyAlive) {
     const ul = document.getElementById('alive-list');
-    if (ul) {
-        ul.innerHTML = aliveList.map(p =>
-            `<li${p.alive ? '' : ' class="dead"'}>${escapeHtml(p.name)}</li>`
-        ).join('');
+    if (!ul) return;
+    ul.innerHTML = '';
+
+    alivePlayers.forEach(p => {
+        const li = document.createElement('li');
+        li.textContent = p.name;
+        li.dataset.playerId = p.id;
+
+        if (!p.alive) {
+            if (previouslyAlive && previouslyAlive.has(p.id)) {
+                li.className = 'just-died';
+                setTimeout(() => { li.className = 'dead'; }, 1000);
+            } else {
+                li.className = 'dead';
+            }
+        } else {
+            li.className = 'alive-enter';
+        }
+
+        ul.appendChild(li);
+    });
+}
+
+function markPlayerDead(playerId) {
+    const li = document.querySelector(`#alive-list li[data-player-id="${playerId}"]`);
+    if (li && !li.classList.contains('dead')) {
+        li.className = 'just-died';
+        setTimeout(() => { li.className = 'dead'; }, 1000);
     }
 }
 
 function handleGameOver({ winner, player_roles }) {
     document.getElementById('gameover-message').textContent = `${winner} wins!`;
     const container = document.getElementById('role-reveals');
-    container.innerHTML = player_roles.map(p =>
-        `<div class="role-reveal-card ${p.alive ? '' : 'dead'}">
+    container.innerHTML = player_roles.map((p, i) =>
+        `<div class="role-reveal-card ${p.alive ? '' : 'dead'}" style="--card-delay: ${i * 0.15}s">
             <div class="player-name">${escapeHtml(p.player_name)}</div>
             <div class="role-name">${p.role}</div>
             <div>${p.alive ? '✓ Alive' : '✗ Dead'}</div>
         </div>`
     ).join('');
 }
+
+// ---------------------------------------------------------------------------
+// Mini-game host display
+// ---------------------------------------------------------------------------
+
+function handleMiniGameStart({ game_type, config, participants }) {
+    const overlay = getOrCreateMiniGameOverlay();
+    overlay.classList.remove('hidden');
+    overlay.classList.add('minigame-enter');
+    setTimeout(() => overlay.classList.remove('minigame-enter'), 500);
+
+    const participantNames = participants.map(id => {
+        const p = players.find(pl => pl.id === id);
+        return p ? p.name : id;
+    });
+
+    const titles = {
+        prisoners_dilemma: '\u{1F91D} Prisoner\u2019s Dilemma',
+        trust_circle: '\u{1F535} Trust Circle',
+        alibi_challenge: '\u{1F526} Alibi Challenge',
+        interrogation: '\u{1F50E} Interrogation',
+    };
+
+    const descriptions = {
+        prisoners_dilemma: 'Two players must choose: Cooperate or Betray?',
+        trust_circle: 'All players rank each other by trust.',
+        alibi_challenge: 'A player is in the spotlight \u2014 defend yourself!',
+        interrogation: 'Three yes-or-no questions. Will the truth come out?',
+    };
+
+    overlay.innerHTML = `
+        <div class="mg-card mg-start">
+            <h2 class="mg-title">${titles[game_type] || game_type}</h2>
+            <p class="mg-desc">${descriptions[game_type] || ''}</p>
+            <div class="mg-participants">
+                ${participantNames.map(n => `<span class="mg-participant">${escapeHtml(n)}</span>`).join('')}
+            </div>
+            <div class="mg-waiting-spinner"></div>
+            <p class="mg-waiting-text">Waiting for responses\u2026</p>
+        </div>
+    `;
+}
+
+function handleMiniGameResult({ game_type, result }) {
+    const overlay = getOrCreateMiniGameOverlay();
+    overlay.classList.remove('hidden');
+
+    switch (game_type) {
+        case 'prisoners_dilemma':
+            renderPrisonerResult(overlay, result);
+            break;
+        case 'trust_circle':
+            renderTrustCircleResult(overlay, result);
+            break;
+        case 'alibi_challenge':
+            renderAlibiResult(overlay, result);
+            break;
+        case 'interrogation':
+            renderInterrogationResult(overlay, result);
+            break;
+        default:
+            overlay.innerHTML = `<div class="mg-card"><pre>${JSON.stringify(result, null, 2)}</pre></div>`;
+    }
+
+    // Auto-dismiss after 12 seconds
+    setTimeout(() => hideMiniGameOverlay(), 12000);
+}
+
+function renderPrisonerResult(overlay, result) {
+    const nameA = playerName(result.player_a.player_id);
+    const nameB = playerName(result.player_b.player_id);
+    const choiceLabel = c => c === 'cooperate' ? '\u{1F91D} Cooperate' : '\u{1F5E1}\uFE0F Betray';
+    const deltaLabel = d => d >= 0 ? `+${d}` : `${d}`;
+
+    overlay.innerHTML = `
+        <div class="mg-card mg-prisoner-result">
+            <h2 class="mg-title">\u{1F91D} Prisoner's Dilemma \u2014 Result</h2>
+            <div class="mg-pd-grid">
+                <div class="mg-pd-cell mg-pd-header"></div>
+                <div class="mg-pd-cell mg-pd-header">${escapeHtml(nameB)}</div>
+                <div class="mg-pd-cell mg-pd-header">${escapeHtml(nameA)}</div>
+                <div class="mg-pd-cell mg-pd-outcome">
+                    <div class="mg-pd-choices">
+                        <span>${choiceLabel(result.player_a.choice)}</span>
+                        <span>vs</span>
+                        <span>${choiceLabel(result.player_b.choice)}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="mg-pd-scores">
+                <div class="mg-pd-score ${result.player_a.score_delta >= 0 ? 'positive' : 'negative'}">
+                    ${escapeHtml(nameA)}: <strong>${deltaLabel(result.player_a.score_delta)}</strong> trust
+                </div>
+                <div class="mg-pd-score ${result.player_b.score_delta >= 0 ? 'positive' : 'negative'}">
+                    ${escapeHtml(nameB)}: <strong>${deltaLabel(result.player_b.score_delta)}</strong> trust
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderTrustCircleResult(overlay, result) {
+    const scores = result.scores || [];
+    const maxRank = scores.length > 0 ? Math.max(...scores.map(s => s.average_rank)) : 1;
+
+    const bars = scores.map(s => {
+        const name = playerName(s.player_id);
+        const pct = ((maxRank - s.average_rank + 1) / maxRank * 100).toFixed(0);
+        return `
+            <div class="mg-tc-bar">
+                <span class="mg-tc-name">${escapeHtml(name)}</span>
+                <div class="mg-tc-fill-track">
+                    <div class="mg-tc-fill" style="width:${pct}%"></div>
+                </div>
+                <span class="mg-tc-rank">${s.average_rank.toFixed(1)}</span>
+            </div>
+        `;
+    }).join('');
+
+    overlay.innerHTML = `
+        <div class="mg-card mg-trust-result">
+            <h2 class="mg-title">\u{1F535} Trust Circle \u2014 Rankings</h2>
+            <p class="mg-subtitle">Lower rank = more trusted</p>
+            <div class="mg-tc-chart">${bars}</div>
+        </div>
+    `;
+}
+
+function renderAlibiResult(overlay, result) {
+    const name = playerName(result.target_id);
+    const total = result.thumbs_up + result.thumbs_down;
+    const upPct = total > 0 ? (result.thumbs_up / total * 100).toFixed(0) : 50;
+    const downPct = total > 0 ? (result.thumbs_down / total * 100).toFixed(0) : 50;
+
+    overlay.innerHTML = `
+        <div class="mg-card mg-alibi-result">
+            <h2 class="mg-title">\u{1F526} Alibi Challenge \u2014 Result</h2>
+            <p class="mg-spotlight-name">${escapeHtml(name)}</p>
+            <div class="mg-alibi-bars">
+                <div class="mg-alibi-bar up" style="width:${upPct}%">
+                    <span>\u{1F44D} ${result.thumbs_up}</span>
+                </div>
+                <div class="mg-alibi-bar down" style="width:${downPct}%">
+                    <span>\u{1F44E} ${result.thumbs_down}</span>
+                </div>
+            </div>
+            <p class="mg-alibi-verdict">${result.thumbs_up >= result.thumbs_down ? '\u2705 The group leans toward believing this player.' : '\u274C The group is skeptical of this player.'}</p>
+        </div>
+    `;
+}
+
+function renderInterrogationResult(overlay, result) {
+    const interrogator = playerName(result.interrogator_id);
+    const target = playerName(result.target_id);
+
+    const qaHtml = (result.qa_pairs || []).map((qa, i) => `
+        <div class="mg-int-qa">
+            <div class="mg-int-q"><span class="mg-int-num">Q${i + 1}.</span> ${escapeHtml(qa.question)}</div>
+            <div class="mg-int-a ${qa.answer ? 'yes' : 'no'}">${qa.answer ? '\u2705 Yes' : '\u274C No'}</div>
+        </div>
+    `).join('');
+
+    overlay.innerHTML = `
+        <div class="mg-card mg-interrogation-result">
+            <h2 class="mg-title">\u{1F50E} Interrogation \u2014 Transcript</h2>
+            <div class="mg-int-players">
+                <span class="mg-int-role">\u{1F575}\uFE0F ${escapeHtml(interrogator)}</span>
+                <span class="mg-int-vs">interrogates</span>
+                <span class="mg-int-role">\u{1F3AF} ${escapeHtml(target)}</span>
+            </div>
+            <div class="mg-int-transcript">${qaHtml}</div>
+        </div>
+    `;
+}
+
+function getOrCreateMiniGameOverlay() {
+    let el = document.getElementById('minigame-overlay');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'minigame-overlay';
+        el.className = 'minigame-overlay hidden';
+        document.getElementById('game-screen').appendChild(el);
+    }
+    return el;
+}
+
+function hideMiniGameOverlay() {
+    const el = document.getElementById('minigame-overlay');
+    if (el) el.classList.add('hidden');
+}
+
+function playerName(id) {
+    const p = players.find(pl => pl.id === id);
+    return p ? p.name : id;
+}
+
+// ---------------------------------------------------------------------------
+// Timer & helpers
+// ---------------------------------------------------------------------------
 
 function startTimer(secs) {
     if (timerInterval) clearInterval(timerInterval);
