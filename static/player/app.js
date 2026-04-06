@@ -8,6 +8,9 @@ let playerFaction = null;
 let selectedTarget = null;
 let timerInterval = null;
 
+// Restore saved name from localStorage
+const savedName = localStorage.getItem('suspects_player_name');
+
 // DOM
 const joinScreen = document.getElementById('join-screen');
 const waitingScreen = document.getElementById('waiting-screen');
@@ -27,7 +30,10 @@ const skipVoteBtn = document.getElementById('skip-vote-btn');
 const chatSendBtn = document.getElementById('chat-send-btn');
 const chatInput = document.getElementById('chat-input');
 
-// Auto-fill room code if provided
+// Auto-fill saved name and focus
+if (savedName) {
+    nameInput.value = savedName;
+}
 if (roomCode) {
     nameInput.focus();
 }
@@ -38,6 +44,7 @@ joinBtn.addEventListener('click', () => {
     const code = roomCode || prompt('Enter room code:');
     if (!code) return;
 
+    localStorage.setItem('suspects_player_name', name);
     ws.send({ type: 'join_room', payload: { room_code: code.toUpperCase(), player_name: name } });
     joinBtn.disabled = true;
 });
