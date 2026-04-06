@@ -16,7 +16,8 @@ use crate::game::scaling::assign_roles;
 use crate::game::roles::{Faction, Role};
 use crate::game::state::GamePhase;
 use crate::game::narrator::{
-    build_night_script, canonical_wake_role, role_display_name, role_instruction, WaitFor,
+    build_night_script, build_dawn_script, build_voting_script,
+    canonical_wake_role, role_display_name, role_instruction, WaitFor,
 };
 use crate::game::phases::resolve_night;
 
@@ -158,6 +159,16 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                             continue;
                         }
 
+                        // Voting timer expired while narration is active —
+                        // resolve votes instead of blindly advancing the phase.
+                        if room.game_state.phase == GamePhase::Voting
+                            && room.narration_active()
+                        {
+                            info!(room_code = %code, "Voting timer expired, resolving votes");
+                            handle_voting_complete(&mut room);
+                            continue;
+                        }
+
                         let new_phase = room.game_state.next_phase();
                         info!(room_code = %code, phase = ?new_phase, round = room.game_state.round, "Phase advanced");
 
@@ -177,9 +188,11 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                         let _ = tx.send(json.clone());
                         room.broadcast_to_players(&json);
 
-                        // Start narration-driven night flow
-                        if new_phase == GamePhase::Night {
-                            start_night_narration(&mut room);
+                        // Phase-specific narration flows
+                        match new_phase {
+                            GamePhase::Night => start_night_narration(&mut room),
+                            GamePhase::Voting => start_voting_narration(&mut room),
+                            _ => {}
                         }
                     }
                 }
@@ -423,6 +436,13 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                         let json = serde_json::to_string(&vote_msg).unwrap();
                         room.send_to_host(&json);
                         room.broadcast_to_players(&json);
+
+                        // If all alive players have voted, resolve immediately
+                        let alive_count = room.alive_players().len();
+                        if room.votes.len() >= alive_count {
+                            info!(room_code = %code, "All alive players voted, resolving");
+                            handle_voting_complete(&mut room);
+                        }
                     }
                 }
             }
@@ -663,12 +683,22 @@ fn start_night_narration(room: &mut Room) {
 }
 
 /// Advance to the next narration step and execute it.
-/// If no steps remain, resolve the night and transition to Dawn.
+/// If no steps remain, handle phase-specific completion.
 fn advance_and_execute_narration(room: &mut Room) {
     if let Some(step) = room.advance_narration() {
         execute_narration_step(room, &step);
     } else {
-        resolve_night_and_advance_to_dawn(room);
+        on_narration_complete(room);
+    }
+}
+
+/// Called when the last narration step has been completed.
+fn on_narration_complete(room: &mut Room) {
+    match room.game_state.phase {
+        GamePhase::Night => resolve_night_and_advance_to_dawn(room),
+        GamePhase::Dawn => transition_dawn_to_day(room),
+        GamePhase::Voting => transition_voting_to_execution(room),
+        _ => {}
     }
 }
 
@@ -804,4 +834,148 @@ fn resolve_night_and_advance_to_dawn(room: &mut Room) {
     let json = serde_json::to_string(&phase_msg).unwrap();
     room.send_to_host(&json);
     room.broadcast_to_players(&json);
+
+    // Send alive player list (reflects deaths)
+    let alive_msg = ServerMessage::AlivePlayerList {
+        players: room.players.iter().map(|p| p.to_info()).collect(),
+    };
+    let alive_json = serde_json::to_string(&alive_msg).unwrap();
+    room.send_to_host(&alive_json);
+    room.broadcast_to_players(&alive_json);
+
+    // Start dawn narration with victim names
+    let death_names: Vec<String> = killed_ids
+        .iter()
+        .filter_map(|id| room.get_player(id).map(|p| p.name.clone()))
+        .collect();
+    let dawn_script = build_dawn_script(&death_names);
+    room.set_narration_queue(dawn_script);
+    if let Some(step) = room.advance_narration() {
+        execute_narration_step(room, &step);
+    } else {
+        // Empty script — go straight to Day
+        transition_dawn_to_day(room);
+    }
+}
+
+/// Transition Dawn → Day with discussion timer.
+fn transition_dawn_to_day(room: &mut Room) {
+    room.clear_narration();
+    let new_phase = room.game_state.next_phase(); // Dawn → Day
+    info!(phase = ?new_phase, round = room.game_state.round, "Dawn narration complete, advancing to Day");
+
+    let timer = room.game_state.day_timer_secs;
+    let phase_msg = ServerMessage::PhaseChanged {
+        phase: new_phase,
+        round: room.game_state.round,
+        timer_secs: timer,
+    };
+    let json = serde_json::to_string(&phase_msg).unwrap();
+    room.send_to_host(&json);
+    room.broadcast_to_players(&json);
+}
+
+/// Build the voting narration script and begin executing it.
+fn start_voting_narration(room: &mut Room) {
+    let script = build_voting_script();
+    room.set_narration_queue(script);
+
+    if let Some(step) = room.advance_narration() {
+        execute_narration_step(room, &step);
+    }
+    // If empty (shouldn't be), voting just proceeds without narration
+}
+
+/// Resolve votes, send results, and advance narration to the final step.
+fn handle_voting_complete(room: &mut Room) {
+    resolve_and_send_vote_result(room);
+
+    // Advance narration past the current "cast_votes" step to "votes_are_in"
+    if room.narration_active() {
+        // Skip forward to the "votes_are_in" step
+        loop {
+            if let Some(step) = room.advance_narration() {
+                if step.key == "voting.votes_are_in" {
+                    execute_narration_step(room, &step);
+                    return;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
+    // No narration left — transition directly
+    transition_voting_to_execution(room);
+}
+
+/// Transition Voting → Execution.
+fn transition_voting_to_execution(room: &mut Room) {
+    room.clear_narration();
+    let new_phase = room.game_state.next_phase(); // Voting → Execution
+    info!(phase = ?new_phase, round = room.game_state.round, "Voting complete, advancing to Execution");
+
+    let phase_msg = ServerMessage::PhaseChanged {
+        phase: new_phase,
+        round: room.game_state.round,
+        timer_secs: 0,
+    };
+    let json = serde_json::to_string(&phase_msg).unwrap();
+    room.send_to_host(&json);
+    room.broadcast_to_players(&json);
+
+    // Send alive player list (reflects lynched player)
+    let alive_msg = ServerMessage::AlivePlayerList {
+        players: room.players.iter().map(|p| p.to_info()).collect(),
+    };
+    let alive_json = serde_json::to_string(&alive_msg).unwrap();
+    room.send_to_host(&alive_json);
+    room.broadcast_to_players(&alive_json);
+}
+
+/// Count votes, determine the outcome, mark the lynched player dead, and broadcast results.
+fn resolve_and_send_vote_result(room: &mut Room) {
+    let mut vote_counts: HashMap<String, usize> = HashMap::new();
+    for target in room.votes.values().flatten() {
+        *vote_counts.entry(target.clone()).or_insert(0) += 1;
+    }
+
+    let max_votes = vote_counts.values().max().copied().unwrap_or(0);
+    let top_targets: Vec<String> = vote_counts
+        .iter()
+        .filter(|(_, count)| **count == max_votes && **count > 0)
+        .map(|(id, _)| id.clone())
+        .collect();
+
+    // Lynch only if there is one clear leader (no tie)
+    let (target_info, was_lynched) = if top_targets.len() == 1 {
+        let target_id = &top_targets[0];
+        let target_name = room
+            .get_player(target_id)
+            .map(|p| p.name.clone())
+            .unwrap_or_default();
+        if let Some(player) = room.get_player_mut(target_id) {
+            player.alive = false;
+        }
+        (
+            Some(PlayerInfo {
+                id: target_id.clone(),
+                name: target_name,
+                alive: false,
+            }),
+            true,
+        )
+    } else {
+        (None, false)
+    };
+
+    let result_msg = ServerMessage::VoteResult {
+        target: target_info,
+        was_lynched,
+    };
+    let json = serde_json::to_string(&result_msg).unwrap();
+    room.send_to_host(&json);
+    room.broadcast_to_players(&json);
+
+    room.votes.clear();
 }

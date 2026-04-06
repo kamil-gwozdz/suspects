@@ -195,7 +195,7 @@ pub fn build_dawn_script(deaths: &[String]) -> Vec<NarrationStep> {
             target_role: None,
         });
     } else {
-        // Generic "someone has been killed" — the TV shows names visually
+        // Generic "someone has been killed" — builds tension before names
         let count_text = if deaths.len() == 1 {
             "A body has been discovered.".to_string()
         } else {
@@ -205,9 +205,20 @@ pub fn build_dawn_script(deaths: &[String]) -> Vec<NarrationStep> {
             key: "dawn.death_announcement".into(),
             text: count_text,
             audio_file: "/audio/gm/dawn/death_announcement.mp3".into(),
-            wait_for: WaitFor::HostAdvance,
+            wait_for: WaitFor::Duration(3),
             target_role: None,
         });
+
+        // Per-victim death reveals — names on screen, generic audio
+        for name in deaths {
+            steps.push(NarrationStep {
+                key: "dawn.death_victim".into(),
+                text: format!("{} was found dead.", name),
+                audio_file: "/audio/gm/dawn/player_found_dead.mp3".into(),
+                wait_for: WaitFor::HostAdvance,
+                target_role: None,
+            });
+        }
     }
 
     // "Time to discuss."
@@ -418,17 +429,26 @@ mod tests {
     fn test_dawn_script_with_deaths() {
         let deaths = vec!["Alice".into()];
         let script = build_dawn_script(&deaths);
-        assert_eq!(script.len(), 3);
+        // open eyes + generic announcement + per-victim + discuss
+        assert_eq!(script.len(), 4);
         assert_eq!(script[1].key, "dawn.death_announcement");
         assert!(script[1].text.contains("A body has been discovered"));
-        assert_eq!(script[1].wait_for, WaitFor::HostAdvance);
+        assert_eq!(script[1].wait_for, WaitFor::Duration(3));
+        // Per-victim step with name
+        assert_eq!(script[2].key, "dawn.death_victim");
+        assert!(script[2].text.contains("Alice"));
+        assert_eq!(script[2].wait_for, WaitFor::HostAdvance);
     }
 
     #[test]
     fn test_dawn_script_multiple_deaths() {
         let deaths = vec!["Alice".into(), "Bob".into()];
         let script = build_dawn_script(&deaths);
+        // open eyes + generic + Alice + Bob + discuss
+        assert_eq!(script.len(), 5);
         assert!(script[1].text.contains("2 bodies"));
+        assert!(script[2].text.contains("Alice"));
+        assert!(script[3].text.contains("Bob"));
     }
 
     #[test]

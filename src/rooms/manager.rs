@@ -196,6 +196,18 @@ impl Room {
         self.narration_current = Some(step.clone());
         Some(step)
     }
+
+    /// Returns `true` if a narration script is currently executing.
+    pub fn narration_active(&self) -> bool {
+        self.narration_current.is_some() || !self.narration_queue.is_empty()
+    }
+
+    /// Clear all narration state.
+    pub fn clear_narration(&mut self) {
+        self.narration_queue.clear();
+        self.narration_current = None;
+        self.narration_ack_pending.clear();
+    }
 }
 
 #[derive(Debug, Clone)]

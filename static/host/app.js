@@ -210,8 +210,8 @@ function handleRoomCreated({ room_code, room_url }) {
             }
         }
     }
-    canvas.style.width = '200px';
-    canvas.style.height = '200px';
+    canvas.style.width = '340px';
+    canvas.style.height = '340px';
     canvas.style.imageRendering = 'pixelated';
     qrContainer.appendChild(canvas);
 
@@ -710,10 +710,14 @@ function handleNarrationStep(payload) {
     // Support both old format (audio_key, wait_type, duration_secs, subtitle)
     // and new script-engine format (key, text, audio_file, wait_for, target_player_id)
     const text = payload.text || '';
+    const key = payload.key || '';
     const audioKey = payload.audio_key || null;
     const audioFile = payload.audio_file || null;
     const waitFor = payload.wait_for || payload.wait_type || 'Duration';
     const subtitle = payload.subtitle || false;
+
+    // Show "votes_are_in" as a non-blocking subtitle so VoteResult stays visible
+    const isSubtitle = subtitle || key === 'voting.votes_are_in';
 
     const overlay       = document.getElementById('narration-overlay');
     const narrationText = document.getElementById('narration-text');
@@ -727,20 +731,37 @@ function handleNarrationStep(payload) {
     indicator.classList.add('hidden');
     nextBtn.classList.add('hidden');
 
-    if (subtitle) {
+    if (isSubtitle) {
         // Subtitle mode: non-blocking text at bottom
         overlay.classList.add('hidden');
         subtitleText.textContent = text;
         subtitleBar.classList.remove('hidden');
+
+        // For votes_are_in with HostAdvance, show Next button inside subtitle bar
+        if (key === 'voting.votes_are_in') {
+            nextBtn.classList.remove('hidden');
+            nextBtn.onclick = () => {
+                nextBtn.classList.add('hidden');
+                subtitleBar.classList.add('hidden');
+                ws.send({ type: 'narration_next' });
+            };
+        }
     } else {
         // Full overlay mode
         subtitleBar.classList.add('hidden');
+
+        // Death announcement styling
+        const isDeath = key === 'dawn.death_victim';
+        narrationText.className = isDeath ? 'narration-text death-announcement' : 'narration-text';
         narrationText.textContent = text;
+
         // Re-trigger fade-in animation
         narrationText.style.animation = 'none';
         void narrationText.offsetWidth;
         narrationText.style.animation = '';
         overlay.classList.remove('hidden');
+
+        // After all dawn narration, atmosphere will switch to day via PhaseChanged
     }
 
     // Play audio — try audio_file (new format), then audio_key (old format via AudioManager)

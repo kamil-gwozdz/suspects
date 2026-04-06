@@ -140,6 +140,9 @@ body {
         linear-gradient(135deg, #0a0a0f 0%, #12101f 25%, #0a0a0f 50%, #151020 75%, #0a0a0f 100%);
     background-size: 400% 400%;
     animation: lobbyGradient 15s ease infinite;
+    padding: 3vh 5vw;
+    justify-content: center;
+    gap: 2vh;
 }
 
 @keyframes lobbyGradient {
@@ -149,26 +152,26 @@ body {
 }
 
 .logo h1 {
-    font-size: 5rem;
+    font-size: clamp(4rem, 8vw, 9rem);
     font-weight: 800;
-    letter-spacing: 0.3em;
+    letter-spacing: 0.4em;
     color: var(--accent);
-    text-shadow: 0 0 40px var(--accent-glow);
+    text-shadow: 0 0 60px var(--accent-glow), 0 0 120px rgba(231, 76, 60, 0.15);
     margin-bottom: 0.2em;
     text-align: center;
 }
 
 .subtitle {
-    font-size: 1.4rem;
+    font-size: 2rem;
     color: var(--text-dim);
     text-align: center;
     font-style: italic;
 }
 
 .lobby-controls {
-    margin-top: 2.5rem;
+    margin-top: 3rem;
     display: flex;
-    gap: 1rem;
+    gap: 1.5rem;
     align-items: center;
 }
 
@@ -176,91 +179,141 @@ body {
     background: var(--accent);
     color: white;
     border: none;
-    padding: 0.8rem 2rem;
-    font-size: 1.1rem;
-    border-radius: 8px;
+    padding: 1.2rem 3rem;
+    font-size: 1.5rem;
+    border-radius: 12px;
     cursor: pointer;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.12em;
     transition: all 0.2s;
+    font-weight: 700;
 }
 
 .btn-primary:hover {
     background: #c0392b;
-    box-shadow: 0 0 20px var(--accent-glow);
+    box-shadow: 0 0 30px var(--accent-glow);
 }
 
 select {
     background: var(--bg-card);
     color: var(--text);
     border: 1px solid #333;
-    padding: 0.8rem 1rem;
-    font-size: 1rem;
-    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    font-size: 1.3rem;
+    border-radius: 12px;
 }
 
 #room-info {
-    margin-top: 2rem;
+    margin-top: 2vh;
     display: flex;
     gap: 3rem;
-    align-items: flex-start;
+    align-items: stretch;
+    width: 85%;
+    max-width: 1500px;
+    flex: 1;
+    max-height: 60vh;
 }
 
 .qr-container {
     text-align: center;
     background: var(--bg-card);
-    padding: 2rem;
-    border-radius: 16px;
+    padding: 3rem 4rem;
+    border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.06);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
 }
 
 #qr-code canvas {
-    border: 4px solid var(--accent);
-    border-radius: 12px;
+    border: 5px solid var(--accent);
+    border-radius: 16px;
 }
 
 .room-code {
-    font-size: 2rem;
-    font-weight: bold;
-    letter-spacing: 0.3em;
-    margin-top: 1rem;
+    font-size: 3.5rem;
+    font-weight: 800;
+    letter-spacing: 0.5em;
+    margin-top: 1.5rem;
     color: var(--gold);
+    text-shadow: 0 0 20px rgba(241, 196, 15, 0.3);
 }
 
 .join-url {
     color: var(--text-dim);
-    font-size: 0.9rem;
+    font-size: 1.2rem;
+    margin-top: 0.5rem;
 }
 
 .player-list {
     background: var(--bg-card);
-    border-radius: 12px;
-    padding: 1.5rem;
-    min-width: 250px;
+    border-radius: 20px;
+    padding: 2.5rem 3rem;
+    flex: 1;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
 }
 
 .player-list h2 {
     margin-top: 0;
+    margin-bottom: 1.2rem;
     color: var(--accent);
+    font-size: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.player-list h2::before {
+    content: '🪑';
+    font-size: 1.6rem;
 }
 
 .player-list ul {
     list-style: none;
     padding: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .player-list li {
-    padding: 0.5rem 0;
-    border-bottom: 1px solid #222;
-    font-size: 1.1rem;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    font-size: 1.8rem;
+    color: #f0f0f0;
     animation: fadeIn 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.player-list li::before {
+    content: '';
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #2ecc71;
+    flex-shrink: 0;
+    box-shadow: 0 0 6px rgba(46, 204, 113, 0.5);
+}
+
+.player-list li:last-child {
+    border-bottom: none;
 }
 
 .player-count {
     color: var(--text-dim);
     text-align: center;
-    margin-top: 1rem;
+    margin-top: 1.2rem;
+    font-size: 1.4rem;
 }
 
 /* Game Screen */
