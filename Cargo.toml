@@ -16,6 +16,7 @@ rand = "0.9"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 futures = "0.3"
+rust-embed = { version = "8", features = ["interpolate-folder-path"] }
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }

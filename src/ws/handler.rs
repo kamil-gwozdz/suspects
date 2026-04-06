@@ -7,11 +7,13 @@ use axum::{
 };
 use futures::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
+use tracing::{info, warn, error};
 
-use crate::rooms::manager::{AppState, Room};
+use crate::rooms::manager::{AppState, Room, MAX_PLAYERS};
 use crate::ws::messages::{ClientMessage, ServerMessage};
 use crate::game::scaling::assign_roles;
 use crate::game::roles::Faction;
+use crate::game::state::GamePhase;
 
 pub async fn host_ws_handler(
     ws: WebSocketUpgrade,
@@ -47,6 +49,7 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
         let text: &str = &text;
 
         let Ok(client_msg) = serde_json::from_str::<ClientMessage>(text) else {
+            warn!("Host sent invalid message format");
             let err = ServerMessage::Error { message: "Invalid message format".to_string() };
             let _ = tx.send(serde_json::to_string(&err).unwrap());
             continue;
@@ -54,7 +57,8 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
 
         match client_msg {
             ClientMessage::CreateRoom { language } => {
-                let code = state.create_room(language).await;
+                let code = state.create_room(language.clone()).await;
+                info!(room_code = %code, language = %language, "Room created");
                 if let Some(room_arc) = state.get_room(&code).await {
                     let mut room = room_arc.lock().await;
                     room.host_tx = Some(tx.clone());
@@ -71,6 +75,15 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                 if let Some(ref code) = room_code {
                     if let Some(room_arc) = state.get_room(code).await {
                         let mut room = room_arc.lock().await;
+
+                        if !room.phase_allows_action("start") {
+                            let err = ServerMessage::Error {
+                                message: "Game has already started".to_string(),
+                            };
+                            let _ = tx.send(serde_json::to_string(&err).unwrap());
+                            continue;
+                        }
+
                         let player_count = room.players.len();
 
                         if player_count < 6 {
@@ -80,6 +93,8 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                             let _ = tx.send(serde_json::to_string(&err).unwrap());
                             continue;
                         }
+
+                        info!(room_code = %code, player_count, "Game starting");
 
                         // Assign roles
                         let roles = assign_roles(player_count);
@@ -111,18 +126,40 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                         let _ = tx.send(serde_json::to_string(&phase_msg).unwrap());
                         room.broadcast_to_players(&serde_json::to_string(&phase_msg).unwrap());
                     }
+                } else {
+                    let err = ServerMessage::Error {
+                        message: "No room created yet".to_string(),
+                    };
+                    let _ = tx.send(serde_json::to_string(&err).unwrap());
                 }
             }
             ClientMessage::AdvancePhase => {
                 if let Some(ref code) = room_code {
                     if let Some(room_arc) = state.get_room(code).await {
                         let mut room = room_arc.lock().await;
+
+                        if room.game_state.phase == GamePhase::GameOver {
+                            let err = ServerMessage::Error {
+                                message: "Game is already over".to_string(),
+                            };
+                            let _ = tx.send(serde_json::to_string(&err).unwrap());
+                            continue;
+                        }
+                        if room.game_state.phase == GamePhase::Lobby {
+                            let err = ServerMessage::Error {
+                                message: "Game has not started yet".to_string(),
+                            };
+                            let _ = tx.send(serde_json::to_string(&err).unwrap());
+                            continue;
+                        }
+
                         let new_phase = room.game_state.next_phase();
+                        info!(room_code = %code, phase = ?new_phase, round = room.game_state.round, "Phase advanced");
 
                         let timer = match new_phase {
-                            crate::game::state::GamePhase::Night => room.game_state.night_timer_secs,
-                            crate::game::state::GamePhase::Day => room.game_state.day_timer_secs,
-                            crate::game::state::GamePhase::Voting => room.game_state.voting_timer_secs,
+                            GamePhase::Night => room.game_state.night_timer_secs,
+                            GamePhase::Day => room.game_state.day_timer_secs,
+                            GamePhase::Voting => room.game_state.voting_timer_secs,
                             _ => 0,
                         };
 
@@ -136,13 +173,33 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                         room.broadcast_to_players(&json);
 
                         // Send night action prompts if entering night
-                        if new_phase == crate::game::state::GamePhase::Night {
+                        if new_phase == GamePhase::Night {
                             send_night_prompts(&room);
                         }
                     }
                 }
             }
             _ => {}
+        }
+    }
+
+    // Host disconnected — record timestamp and notify players
+    if let Some(ref code) = room_code {
+        info!(room_code = %code, "Host disconnected");
+        if let Some(room_arc) = state.get_room(code).await {
+            let mut room = room_arc.lock().await;
+            room.host_disconnected_at = Some(std::time::Instant::now());
+            room.host_tx = None;
+
+            // Notify all connected players that the host disconnected
+            if room.game_state.phase != GamePhase::Lobby
+                && room.game_state.phase != GamePhase::GameOver
+            {
+                let msg = ServerMessage::Error {
+                    message: "Host disconnected — game paused. Waiting for host to reconnect...".to_string(),
+                };
+                room.broadcast_to_players(&serde_json::to_string(&msg).unwrap());
+            }
         }
     }
 

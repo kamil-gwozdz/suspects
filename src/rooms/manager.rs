@@ -10,6 +10,9 @@ use crate::game::state::{GamePhase, GameState};
 use crate::game::roles::Role;
 use crate::ws::messages::PlayerInfo;
 
+/// Maximum number of players allowed in a single room.
+pub const MAX_PLAYERS: usize = 30;
+
 #[derive(Debug, Clone)]
 pub struct Player {
     pub id: String,
@@ -41,6 +44,9 @@ pub struct Room {
     pub host_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
     pub votes: HashMap<String, Option<String>>,
     pub night_actions: Vec<crate::game::phases::NightAction>,
+    pub created_at: Instant,
+    /// When the host disconnected; `None` if host is connected.
+    pub host_disconnected_at: Option<Instant>,
 }
 
 impl Room {
@@ -55,6 +61,8 @@ impl Room {
             host_tx: None,
             votes: HashMap::new(),
             night_actions: Vec::new(),
+            created_at: Instant::now(),
+            host_disconnected_at: None,
         }
     }
 
@@ -97,6 +105,36 @@ impl Room {
 
     pub fn alive_players(&self) -> Vec<&Player> {
         self.players.iter().filter(|p| p.alive).collect()
+    }
+
+    /// Returns `true` if the room has reached the maximum player capacity.
+    pub fn is_full(&self) -> bool {
+        self.players.len() >= MAX_PLAYERS
+    }
+
+    /// Returns `true` if a player with the given name (case-insensitive) already exists.
+    pub fn has_player_named(&self, name: &str) -> bool {
+        let lower = name.to_lowercase();
+        self.players.iter().any(|p| p.name.to_lowercase() == lower)
+    }
+
+    /// Returns `true` if the given action kind is permitted in the current phase.
+    /// `action` should be one of: `"join"`, `"night_action"`, `"vote"`, `"chat"`, `"start"`.
+    pub fn phase_allows_action(&self, action: &str) -> bool {
+        match action {
+            "join" => self.game_state.phase == GamePhase::Lobby,
+            "start" => self.game_state.phase == GamePhase::Lobby,
+            "night_action" => self.game_state.phase == GamePhase::Night,
+            "vote" => self.game_state.phase == GamePhase::Voting,
+            "chat" => self.game_state.phase == GamePhase::Night,
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if the room has no connected players and no connected host.
+    pub fn is_abandoned(&self) -> bool {
+        self.host_tx.is_none()
+            && self.players.iter().all(|p| !p.connected)
     }
 
     pub fn get_player(&self, id: &str) -> Option<&Player> {
@@ -168,6 +206,40 @@ impl AppState {
     pub async fn get_room(&self, code: &str) -> Option<Arc<Mutex<Room>>> {
         let rooms = self.rooms.read().await;
         rooms.get(code).cloned()
+    }
+
+    /// Remove rooms that have been fully abandoned (no host, no connected players)
+    /// for at least `min_age` duration.
+    pub async fn remove_abandoned_rooms(&self, min_age: std::time::Duration) -> Vec<String> {
+        let rooms = self.rooms.read().await;
+        let mut to_remove = Vec::new();
+
+        for (code, room_arc) in rooms.iter() {
+            let room = room_arc.lock().await;
+            if room.is_abandoned() {
+                // Check if the room has been around long enough and host has been gone
+                let host_gone_long_enough = room
+                    .host_disconnected_at
+                    .map_or(false, |t| t.elapsed() >= min_age);
+                let all_players_gone_long_enough = room.players.iter().all(|p| {
+                    p.disconnected_at
+                        .map_or(true, |t| t.elapsed() >= min_age)
+                });
+                if host_gone_long_enough && all_players_gone_long_enough {
+                    to_remove.push(code.clone());
+                }
+            }
+        }
+        drop(rooms);
+
+        if !to_remove.is_empty() {
+            let mut rooms = self.rooms.write().await;
+            for code in &to_remove {
+                rooms.remove(code);
+            }
+        }
+
+        to_remove
     }
 }
 
@@ -267,5 +339,63 @@ mod tests {
         player.connected = true;
         player.disconnected_at = None;
         assert!(player.disconnected_at.is_none());
+    }
+
+    #[test]
+    fn test_is_full() {
+        let mut room = Room::new("en".to_string());
+        assert!(!room.is_full());
+        for i in 0..MAX_PLAYERS {
+            room.add_player(format!("Player{}", i));
+        }
+        assert!(room.is_full());
+    }
+
+    #[test]
+    fn test_has_player_named() {
+        let mut room = Room::new("en".to_string());
+        room.add_player("Alice".to_string());
+        assert!(room.has_player_named("Alice"));
+        assert!(room.has_player_named("alice"));
+        assert!(room.has_player_named("ALICE"));
+        assert!(!room.has_player_named("Bob"));
+    }
+
+    #[test]
+    fn test_phase_allows_action() {
+        let mut room = Room::new("en".to_string());
+        // Lobby phase
+        assert!(room.phase_allows_action("join"));
+        assert!(room.phase_allows_action("start"));
+        assert!(!room.phase_allows_action("night_action"));
+        assert!(!room.phase_allows_action("vote"));
+
+        room.game_state.next_phase(); // RoleReveal
+        room.game_state.next_phase(); // Night
+        assert!(!room.phase_allows_action("join"));
+        assert!(room.phase_allows_action("night_action"));
+        assert!(room.phase_allows_action("chat"));
+        assert!(!room.phase_allows_action("vote"));
+
+        room.game_state.next_phase(); // Dawn
+        room.game_state.next_phase(); // Day
+        room.game_state.next_phase(); // Voting
+        assert!(room.phase_allows_action("vote"));
+        assert!(!room.phase_allows_action("night_action"));
+    }
+
+    #[test]
+    fn test_is_abandoned() {
+        let mut room = Room::new("en".to_string());
+        // No host, no players — abandoned
+        assert!(room.is_abandoned());
+
+        // Add a connected player — not abandoned
+        room.add_player("Alice".to_string());
+        assert!(!room.is_abandoned());
+
+        // Disconnect the player — abandoned (no host either)
+        room.players[0].connected = false;
+        assert!(room.is_abandoned());
     }
 }
