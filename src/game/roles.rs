@@ -1,11 +1,18 @@
 use serde::{Deserialize, Serialize};
 
+/// Factions in the game. Currently Town vs Mafia with some Neutrals.
+/// Designed to be extensible — future factions (e.g. Cult, Vampires, Third Party)
+/// can be added here without breaking existing logic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Faction {
     Town,
     Mafia,
     Neutral,
+    // Future factions:
+    // Cult,
+    // Vampires,
+    // Aliens,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

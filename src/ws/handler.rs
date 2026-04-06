@@ -283,16 +283,115 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                     }
                 }
             }
+            ClientMessage::Reconnect { player_id: pid, room_code: code } => {
+                if let Some(room_arc) = state.get_room(&code).await {
+                    let mut room = room_arc.lock().await;
+
+                    let player_exists = room.get_player(&pid).is_some();
+                    if !player_exists {
+                        let err = ServerMessage::Error { message: "Player not found in room".to_string() };
+                        let _ = tx.send(serde_json::to_string(&err).unwrap());
+                        continue;
+                    }
+
+                    // Re-attach WebSocket sender and mark connected
+                    if let Some(player) = room.get_player_mut(&pid) {
+                        player.tx = Some(tx.clone());
+                        player.connected = true;
+                        player.disconnected_at = None;
+                    }
+
+                    // Track the reconnected player locally
+                    player_id = Some(pid.clone());
+                    player_room_code = Some(code.clone());
+
+                    let snapshot = room.get_game_snapshot();
+
+                    // Gather player-specific info
+                    let player = room.get_player(&pid).unwrap();
+                    let role = player.role;
+                    let description_key = role.map(|r| r.description_key().to_string());
+                    let faction = role.map(|r| format!("{:?}", r.faction()));
+                    let player_name = player.name.clone();
+                    let player_alive = player.alive;
+
+                    // Include vote tally if in voting phase
+                    let votes = if snapshot.phase == crate::game::state::GamePhase::Voting {
+                        Some(room.votes.iter().map(|(voter_id, target)| {
+                            let voter_name = room.get_player(voter_id)
+                                .map(|p| p.name.clone())
+                                .unwrap_or_default();
+                            crate::ws::messages::VoteInfo {
+                                voter_id: voter_id.clone(),
+                                voter_name,
+                                target_id: target.clone(),
+                            }
+                        }).collect())
+                    } else {
+                        None
+                    };
+
+                    // Send reconnect state to the player
+                    let reconnect_msg = ServerMessage::ReconnectState {
+                        player_id: pid.clone(),
+                        room_code: code.clone(),
+                        phase: snapshot.phase,
+                        round: snapshot.round,
+                        alive_players: snapshot.alive_players,
+                        role,
+                        description_key,
+                        faction,
+                        votes,
+                    };
+                    let _ = tx.send(serde_json::to_string(&reconnect_msg).unwrap());
+
+                    // If night phase and player has night action, send prompt
+                    if snapshot.phase == crate::game::state::GamePhase::Night
+                        && player_alive
+                    {
+                        if let Some(r) = role {
+                            if r.has_night_action() {
+                                let alive_targets: Vec<crate::ws::messages::PlayerInfo> = room.alive_players()
+                                    .iter()
+                                    .filter(|p| p.id != pid)
+                                    .map(|p| p.to_info())
+                                    .collect();
+                                let prompt = ServerMessage::NightActionPrompt {
+                                    available_targets: alive_targets,
+                                };
+                                let _ = tx.send(serde_json::to_string(&prompt).unwrap());
+                            }
+                        }
+                    }
+
+                    // Notify host
+                    let host_msg = ServerMessage::PlayerReconnected {
+                        player_id: pid,
+                        player_name,
+                    };
+                    room.send_to_host(&serde_json::to_string(&host_msg).unwrap());
+
+                    // Send updated player list to host
+                    let list_msg = ServerMessage::PlayerList {
+                        players: room.players.iter().map(|p| p.to_info()).collect(),
+                    };
+                    room.send_to_host(&serde_json::to_string(&list_msg).unwrap());
+                } else {
+                    let err = ServerMessage::Error { message: "Room not found".to_string() };
+                    let _ = tx.send(serde_json::to_string(&err).unwrap());
+                }
+            }
             _ => {}
         }
     }
 
-    // Player disconnected
+    // Player disconnected — record timestamp for reconnection tracking
     if let (Some(pid), Some(code)) = (&player_id, &player_room_code) {
         if let Some(room_arc) = state.get_room(code).await {
             let mut room = room_arc.lock().await;
             if let Some(player) = room.get_player_mut(pid) {
                 player.connected = false;
+                player.disconnected_at = Some(std::time::Instant::now());
                 let name = player.name.clone();
                 let msg = ServerMessage::PlayerLeft {
                     player_id: pid.clone(),

@@ -8,8 +8,10 @@ let playerFaction = null;
 let selectedTarget = null;
 let timerInterval = null;
 
-// Restore saved name from localStorage
+// Restore saved session from localStorage
 const savedName = localStorage.getItem('suspects_player_name');
+const savedPlayerId = localStorage.getItem('suspects_player_id');
+const savedRoomCode = localStorage.getItem('suspects_room_code');
 
 // DOM
 const joinScreen = document.getElementById('join-screen');
@@ -20,6 +22,7 @@ const dayScreen = document.getElementById('day-screen');
 const voteScreen = document.getElementById('vote-screen');
 const deadScreen = document.getElementById('dead-screen');
 const gameoverScreen = document.getElementById('gameover-player-screen');
+const reconnectOverlay = document.getElementById('reconnect-overlay');
 
 const joinBtn = document.getElementById('join-btn');
 const nameInput = document.getElementById('player-name');
@@ -37,6 +40,18 @@ if (savedName) {
 if (roomCode) {
     nameInput.focus();
 }
+
+// Connection state tracking — show/hide reconnecting overlay
+ws.onStateChange((state) => {
+    if (state === 'disconnected' || state === 'reconnecting') {
+        // Only show overlay if player has an active session
+        if (playerId || savedPlayerId) {
+            reconnectOverlay.classList.remove('hidden');
+        }
+    } else if (state === 'connected') {
+        reconnectOverlay.classList.add('hidden');
+    }
+});
 
 joinBtn.addEventListener('click', () => {
     const name = nameInput.value.trim();
@@ -91,6 +106,9 @@ ws.onMessage((msg) => {
         case 'joined_room':
             handleJoined(msg.payload);
             break;
+        case 'reconnect_state':
+            handleReconnectState(msg.payload);
+            break;
         case 'role_assigned':
             handleRoleAssigned(msg.payload);
             break;
@@ -122,10 +140,65 @@ function showScreen(screen) {
     screen.classList.add('active');
 }
 
-function handleJoined({ player_id }) {
+function handleJoined({ player_id, room_code }) {
     playerId = player_id;
+    localStorage.setItem('suspects_player_id', player_id);
+    localStorage.setItem('suspects_room_code', room_code);
     document.getElementById('waiting-name').textContent = nameInput.value.trim();
     showScreen(waitingScreen);
+}
+
+function handleReconnectState({ player_id, room_code, phase, round, alive_players, role, description_key, faction, votes }) {
+    playerId = player_id;
+    localStorage.setItem('suspects_player_id', player_id);
+    localStorage.setItem('suspects_room_code', room_code);
+    reconnectOverlay.classList.add('hidden');
+
+    // Restore role info if assigned
+    if (role) {
+        playerRole = role;
+        playerFaction = faction ? faction.toLowerCase() : null;
+    }
+
+    // Check if player is dead
+    const me = alive_players.find(p => p.id === player_id);
+    if (role && !me) {
+        showScreen(deadScreen);
+        return;
+    }
+
+    // Route to the correct screen based on current phase
+    switch (phase) {
+        case 'lobby':
+            showScreen(waitingScreen);
+            break;
+        case 'role_reveal':
+            if (role) {
+                handleRoleAssigned({ role, description_key: description_key || '', faction: faction || '' });
+            } else {
+                showScreen(waitingScreen);
+            }
+            break;
+        case 'night':
+            // Night prompt will follow as a separate message if applicable
+            showScreen(nightScreen);
+            break;
+        case 'dawn':
+        case 'day':
+            showScreen(dayScreen);
+            break;
+        case 'voting':
+            showScreen(voteScreen);
+            break;
+        case 'execution':
+            showScreen(dayScreen);
+            break;
+        case 'game_over':
+            showScreen(gameoverScreen);
+            break;
+        default:
+            showScreen(waitingScreen);
+    }
 }
 
 function handleRoleAssigned({ role, description_key, faction }) {
@@ -217,6 +290,9 @@ function handleGameOver({ winner, player_roles }) {
         document.getElementById('gameover-player-result').textContent =
             `You were ${formatRole(myResult.role)} — ${myResult.alive ? 'Survived!' : 'Eliminated'}`;
     }
+    // Clear stored session — game is over
+    localStorage.removeItem('suspects_player_id');
+    localStorage.removeItem('suspects_room_code');
     showScreen(gameoverScreen);
 }
 

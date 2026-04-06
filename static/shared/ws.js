@@ -2,9 +2,12 @@ class WsClient {
     constructor(path) {
         this.path = path;
         this.handlers = [];
+        this.stateHandlers = [];
         this.ws = null;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 10;
+        this.connected = false;
+        this._hasConnectedOnce = false;
         this.connect();
     }
 
@@ -15,7 +18,23 @@ class WsClient {
 
         this.ws.onopen = () => {
             console.log('WebSocket connected');
+            this.connected = true;
             this.reconnectAttempts = 0;
+            this._notifyState('connected');
+
+            // On reconnect, automatically send Reconnect message if we have stored session
+            if (this._hasConnectedOnce) {
+                const storedPlayerId = localStorage.getItem('suspects_player_id');
+                const storedRoomCode = localStorage.getItem('suspects_room_code');
+                if (storedPlayerId && storedRoomCode) {
+                    console.log('Attempting reconnect with stored session');
+                    this.send({
+                        type: 'reconnect',
+                        payload: { player_id: storedPlayerId, room_code: storedRoomCode }
+                    });
+                }
+            }
+            this._hasConnectedOnce = true;
         };
 
         this.ws.onmessage = (event) => {
@@ -29,6 +48,8 @@ class WsClient {
 
         this.ws.onclose = () => {
             console.log('WebSocket disconnected');
+            this.connected = false;
+            this._notifyState('disconnected');
             this.tryReconnect();
         };
 
@@ -42,6 +63,7 @@ class WsClient {
         this.reconnectAttempts++;
         const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
         console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+        this._notifyState('reconnecting');
         setTimeout(() => this.connect(), delay);
     }
 
@@ -55,5 +77,13 @@ class WsClient {
 
     onMessage(fn) {
         this.handlers.push(fn);
+    }
+
+    onStateChange(fn) {
+        this.stateHandlers.push(fn);
+    }
+
+    _notifyState(state) {
+        this.stateHandlers.forEach(fn => fn(state));
     }
 }

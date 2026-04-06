@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use crate::game::roles::Role;
 use crate::game::state::GamePhase;
+use crate::game::minigames::MiniGameType;
 
 /// Messages sent from clients (host or player) to the server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,6 +24,8 @@ pub enum ClientMessage {
     AdvancePhase,
     /// Player reconnects
     Reconnect { player_id: String, room_code: String },
+    /// Player responds to a mini-game prompt
+    MiniGameAction { game_type: MiniGameType, action: serde_json::Value },
 }
 
 /// Messages sent from the server to clients.
@@ -36,6 +39,8 @@ pub enum ServerMessage {
     PlayerJoined { player_id: String, player_name: String, player_count: usize },
     /// Player left/disconnected
     PlayerLeft { player_id: String, player_name: String },
+    /// Player reconnected (sent to host)
+    PlayerReconnected { player_id: String, player_name: String },
     /// Joined room confirmation (sent to player)
     JoinedRoom { player_id: String, room_code: String },
     /// Phase changed
@@ -62,6 +67,24 @@ pub enum ServerMessage {
     PlayerList { players: Vec<PlayerInfo> },
     /// Alive players list
     AlivePlayerList { players: Vec<PlayerInfo> },
+    /// Reconnect state (sent to reconnecting player)
+    ReconnectState {
+        player_id: String,
+        room_code: String,
+        phase: GamePhase,
+        round: u32,
+        alive_players: Vec<PlayerInfo>,
+        role: Option<Role>,
+        description_key: Option<String>,
+        faction: Option<String>,
+        votes: Option<Vec<VoteInfo>>,
+    },
+    /// Mini-game started (broadcast to all)
+    MiniGameStart { game_type: MiniGameType, config: serde_json::Value, participants: Vec<String> },
+    /// Mini-game prompt (sent to individual players)
+    MiniGamePrompt { game_type: MiniGameType, prompt: serde_json::Value },
+    /// Mini-game result (sent to host for display)
+    MiniGameResult { game_type: MiniGameType, result: serde_json::Value },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

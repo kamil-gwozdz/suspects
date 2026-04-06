@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::{Mutex, RwLock};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 use rand::Rng;
 
-use crate::game::state::GameState;
+use crate::game::state::{GamePhase, GameState};
 use crate::game::roles::Role;
 use crate::ws::messages::PlayerInfo;
 
@@ -16,6 +17,7 @@ pub struct Player {
     pub role: Option<Role>,
     pub alive: bool,
     pub connected: bool,
+    pub disconnected_at: Option<Instant>,
     pub tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 }
 
@@ -64,9 +66,33 @@ impl Room {
             role: None,
             alive: true,
             connected: true,
+            disconnected_at: None,
             tx: None,
         });
         id
+    }
+
+    /// Remove a player by ID. Only allowed during Lobby phase.
+    /// Returns the removed player's name if successful.
+    pub fn remove_player(&mut self, id: &str) -> Option<String> {
+        if self.game_state.phase != GamePhase::Lobby {
+            return None;
+        }
+        if let Some(pos) = self.players.iter().position(|p| p.id == id) {
+            let player = self.players.remove(pos);
+            Some(player.name)
+        } else {
+            None
+        }
+    }
+
+    /// Returns a snapshot of current game state for reconnecting players.
+    pub fn get_game_snapshot(&self) -> GameSnapshot {
+        GameSnapshot {
+            phase: self.game_state.phase,
+            round: self.game_state.round,
+            alive_players: self.alive_players().iter().map(|p| p.to_info()).collect(),
+        }
     }
 
     pub fn alive_players(&self) -> Vec<&Player> {
@@ -102,6 +128,13 @@ impl Room {
             }
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct GameSnapshot {
+    pub phase: GamePhase,
+    pub round: u32,
+    pub alive_players: Vec<PlayerInfo>,
 }
 
 fn generate_room_code() -> String {
@@ -170,5 +203,69 @@ mod tests {
         room.add_player("Bob".to_string());
         room.players[0].alive = false;
         assert_eq!(room.alive_players().len(), 1);
+    }
+
+    #[test]
+    fn test_remove_player_in_lobby() {
+        let mut room = Room::new("en".to_string());
+        let id = room.add_player("Alice".to_string());
+        room.add_player("Bob".to_string());
+        assert_eq!(room.players.len(), 2);
+
+        let name = room.remove_player(&id);
+        assert_eq!(name, Some("Alice".to_string()));
+        assert_eq!(room.players.len(), 1);
+        assert_eq!(room.players[0].name, "Bob");
+    }
+
+    #[test]
+    fn test_remove_player_not_in_lobby() {
+        let mut room = Room::new("en".to_string());
+        let id = room.add_player("Alice".to_string());
+        room.game_state.next_phase(); // RoleReveal
+        let name = room.remove_player(&id);
+        assert_eq!(name, None);
+        assert_eq!(room.players.len(), 1);
+    }
+
+    #[test]
+    fn test_remove_nonexistent_player() {
+        let mut room = Room::new("en".to_string());
+        room.add_player("Alice".to_string());
+        let name = room.remove_player("nonexistent");
+        assert_eq!(name, None);
+        assert_eq!(room.players.len(), 1);
+    }
+
+    #[test]
+    fn test_get_game_snapshot() {
+        let mut room = Room::new("en".to_string());
+        room.add_player("Alice".to_string());
+        room.add_player("Bob".to_string());
+        room.players[0].alive = false;
+
+        let snapshot = room.get_game_snapshot();
+        assert_eq!(snapshot.phase, crate::game::state::GamePhase::Lobby);
+        assert_eq!(snapshot.round, 0);
+        assert_eq!(snapshot.alive_players.len(), 1);
+        assert_eq!(snapshot.alive_players[0].name, "Bob");
+    }
+
+    #[test]
+    fn test_disconnection_timestamp() {
+        let mut room = Room::new("en".to_string());
+        let id = room.add_player("Alice".to_string());
+        let player = room.get_player_mut(&id).unwrap();
+        assert!(player.disconnected_at.is_none());
+
+        let now = std::time::Instant::now();
+        player.connected = false;
+        player.disconnected_at = Some(now);
+        assert!(player.disconnected_at.is_some());
+
+        // Simulate reconnect
+        player.connected = true;
+        player.disconnected_at = None;
+        assert!(player.disconnected_at.is_none());
     }
 }

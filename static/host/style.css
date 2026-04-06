@@ -6,6 +6,10 @@
     --text: #e0e0e0;
     --text-dim: #888;
     --gold: #f1c40f;
+    --night-bg: #05050d;
+    --dawn-sky: #1a0a2e;
+    --day-bg: #0d1117;
+    --blood: #8b0000;
 }
 
 body {
@@ -19,6 +23,116 @@ body {
 
 .screen { display: none; width: 100vw; height: 100vh; }
 .screen.active { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+/* ═══════════════════════════════════════
+   Phase Overlay & Transition System
+   ═══════════════════════════════════════ */
+
+.phase-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.8s ease;
+}
+
+.phase-overlay.active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.phase-overlay.night-transition {
+    background: radial-gradient(ellipse at 50% 20%, #0d0d2b 0%, #050510 60%, #000 100%);
+}
+
+.phase-overlay.dawn-transition {
+    background: linear-gradient(to top, #2d1b4e 0%, #1a0a2e 30%, #0d0520 60%, #050510 100%);
+}
+
+.phase-overlay.voting-transition {
+    background: radial-gradient(ellipse at center, rgba(139,0,0,0.7) 0%, rgba(10,10,15,0.95) 100%);
+}
+
+.phase-overlay.execution-transition {
+    background: #000;
+}
+
+.phase-overlay.gameover-transition {
+    background: radial-gradient(ellipse at center, rgba(241,196,15,0.2) 0%, #0a0a0f 70%);
+}
+
+/* ═══════════════════════════════════════
+   Stars Layer
+   ═══════════════════════════════════════ */
+
+.stars-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 1.5s ease;
+    pointer-events: none;
+}
+
+.stars-layer.visible {
+    opacity: 1;
+}
+
+.star {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #fff;
+    border-radius: 50%;
+    animation: twinkle var(--duration) ease-in-out infinite;
+    animation-delay: var(--delay);
+}
+
+.star.bright {
+    width: 3px;
+    height: 3px;
+    box-shadow: 0 0 6px 1px rgba(255, 255, 255, 0.5);
+}
+
+@keyframes twinkle {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 1; }
+}
+
+/* ═══════════════════════════════════════
+   Phase Atmosphere on Game Screen
+   ═══════════════════════════════════════ */
+
+#game-screen {
+    transition: background 1.5s ease;
+    position: relative;
+    z-index: 1;
+}
+
+#game-screen.phase-night {
+    background: linear-gradient(180deg, #05050d 0%, #0a0a1a 40%, #0d0d25 100%);
+}
+
+#game-screen.phase-dawn {
+    background: linear-gradient(180deg, #1a0a2e 0%, #2d1540 40%, #3d1a3a 70%, #4a2040 100%);
+}
+
+#game-screen.phase-day {
+    background: linear-gradient(180deg, #0f1520 0%, #141e30 40%, #1a2740 100%);
+}
+
+#game-screen.phase-voting {
+    background: linear-gradient(180deg, #1a0a0a 0%, #0f0808 50%, #0a0505 100%);
+}
+
+#game-screen.phase-execution {
+    background: #050505;
+}
+
+#game-screen.phase-game_over {
+    background: radial-gradient(ellipse at center, #1a1500 0%, #0a0a0f 70%);
+}
 
 /* Lobby */
 .logo h1 {
@@ -136,9 +250,12 @@ select {
     justify-content: center;
     gap: 2rem;
     padding: 1rem 2rem;
-    background: var(--bg-card);
+    background: rgba(20, 20, 31, 0.85);
+    backdrop-filter: blur(8px);
     width: 100%;
     font-size: 1.3rem;
+    z-index: 2;
+    transition: background 1s ease;
 }
 
 .phase-display {

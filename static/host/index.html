@@ -41,6 +41,11 @@
             </div>
         </div>
 
+        <!-- Phase transition overlay -->
+        <div id="phase-overlay" class="phase-overlay"></div>
+        <!-- Stars layer (visible during night/dawn) -->
+        <div id="stars-layer" class="stars-layer"></div>
+
         <!-- Game Screen -->
         <div id="game-screen" class="screen">
             <div class="game-header">
@@ -52,7 +57,7 @@
                 <div id="night-view" class="phase-view">
                     <div class="moon-icon">🌙</div>
                     <h2 data-i18n="night_falls">Night falls on the town...</h2>
-                    <p data-i18n="night_description">The suspects are making their moves.</p>
+                    <p class="narration" data-i18n="night_description">The suspects are making their moves.</p>
                 </div>
                 <div id="dawn-view" class="phase-view hidden">
                     <div class="sun-icon">🌅</div>
@@ -62,7 +67,7 @@
                 <div id="day-view" class="phase-view hidden">
                     <div class="sun-icon">☀️</div>
                     <h2 data-i18n="day_discussion">Time to discuss</h2>
-                    <p data-i18n="day_description">Talk it out. Who do you suspect?</p>
+                    <p class="narration" data-i18n="day_description">Talk it out. Who do you suspect?</p>
                 </div>
                 <div id="voting-view" class="phase-view hidden">
                     <div class="voting-header">
