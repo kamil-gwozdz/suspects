@@ -200,34 +200,271 @@ select {
     text-decoration: line-through;
 }
 
+/* ── Voting Header ── */
+.voting-header {
+    margin-bottom: 2rem;
+}
+
+.voting-icon {
+    font-size: 4rem;
+    animation: votePulse 2s ease-in-out infinite;
+}
+
+.voting-subtitle {
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    margin-top: 0.3rem;
+}
+
+@keyframes votePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.votes-cast-counter {
+    margin-top: 1.5rem;
+    font-size: 1rem;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+}
+
+/* ── Vote Bars ── */
 #vote-bars {
-    width: 80%;
-    max-width: 600px;
+    width: 90%;
+    max-width: 700px;
     margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
 }
 
 .vote-bar {
-    display: flex;
+    display: grid;
+    grid-template-columns: 140px 1fr 50px;
     align-items: center;
     gap: 1rem;
-    margin: 0.5rem 0;
+    padding: 0.6rem 1rem;
+    border-radius: 10px;
+    background: rgba(20, 20, 31, 0.6);
+    transition: transform 0.4s cubic-bezier(.34,1.56,.64,1),
+                box-shadow 0.4s ease,
+                background 0.4s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.vote-bar.entering {
+    animation: barEnter 0.5s cubic-bezier(.34,1.56,.64,1) both;
+}
+
+@keyframes barEnter {
+    from { opacity: 0; transform: translateX(-40px) scale(0.95); }
+    to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.vote-bar.leader {
+    background: rgba(231, 76, 60, 0.1);
+    box-shadow: 0 0 25px rgba(231, 76, 60, 0.25), inset 0 0 20px rgba(231, 76, 60, 0.05);
+    transform: scale(1.03);
+    animation: leaderGlow 1.8s ease-in-out infinite;
+}
+
+@keyframes leaderGlow {
+    0%, 100% { box-shadow: 0 0 25px rgba(231, 76, 60, 0.25), inset 0 0 20px rgba(231, 76, 60, 0.05); }
+    50%      { box-shadow: 0 0 40px rgba(231, 76, 60, 0.45), inset 0 0 30px rgba(231, 76, 60, 0.1); }
 }
 
 .vote-bar-name {
-    width: 120px;
+    font-size: 1.15rem;
+    font-weight: 600;
     text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.vote-bar-track {
+    height: 34px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
 }
 
 .vote-bar-fill {
-    height: 30px;
-    background: var(--accent);
-    border-radius: 4px;
-    transition: width 0.3s;
-    min-width: 4px;
+    height: 100%;
+    border-radius: 6px;
+    min-width: 6px;
+    transition: width 0.6s cubic-bezier(.25,.8,.25,1),
+                background 0.6s ease;
+    position: relative;
+}
+
+/* Color coding by vote intensity */
+.vote-bar-fill.heat-low {
+    background: linear-gradient(90deg, #27ae60, #2ecc71);
+    box-shadow: 0 0 12px rgba(46, 204, 113, 0.3);
+}
+
+.vote-bar-fill.heat-med {
+    background: linear-gradient(90deg, #f39c12, #f1c40f);
+    box-shadow: 0 0 12px rgba(241, 196, 15, 0.3);
+}
+
+.vote-bar-fill.heat-high {
+    background: linear-gradient(90deg, #e74c3c, #c0392b);
+    box-shadow: 0 0 12px rgba(231, 76, 60, 0.4);
+}
+
+.vote-bar-fill.heat-max {
+    background: linear-gradient(90deg, #c0392b, #8e0000);
+    box-shadow: 0 0 20px rgba(231, 76, 60, 0.6);
+}
+
+.vote-bar-fill::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(90deg, transparent 60%, rgba(255,255,255,0.15));
+    border-radius: 6px;
 }
 
 .vote-bar-count {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text);
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    transition: transform 0.3s ease;
+}
+
+.vote-bar-count.bumped {
+    animation: countBump 0.35s ease;
+}
+
+@keyframes countBump {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.5); color: var(--gold); }
+    100% { transform: scale(1); }
+}
+
+/* Voter names under each bar */
+.vote-bar-voters {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    justify-content: center;
+    padding-top: 0.2rem;
+}
+
+.voter-chip {
+    font-size: 0.75rem;
+    padding: 0.15rem 0.6rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.07);
     color: var(--text-dim);
+    animation: chipIn 0.3s ease both;
+}
+
+@keyframes chipIn {
+    from { opacity: 0; transform: scale(0.7); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Execution / Reveal ── */
+.execution-reveal {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+}
+
+.reveal-countdown {
+    font-size: 8rem;
+    font-weight: 900;
+    color: var(--accent);
+    text-shadow: 0 0 60px var(--accent-glow);
+    animation: countdownPulse 0.8s ease-in-out;
+}
+
+@keyframes countdownPulse {
+    0%   { transform: scale(2); opacity: 0; }
+    50%  { transform: scale(1); opacity: 1; }
+    90%  { transform: scale(1); opacity: 1; }
+    100% { transform: scale(0.8); opacity: 0; }
+}
+
+.reveal-spotlight {
+    text-align: center;
+    animation: spotlightIn 1.2s cubic-bezier(.34,1.56,.64,1) both;
+}
+
+@keyframes spotlightIn {
+    0%   { transform: scale(0.3); opacity: 0; filter: blur(20px); }
+    60%  { transform: scale(1.1); opacity: 1; filter: blur(0); }
+    100% { transform: scale(1); opacity: 1; filter: blur(0); }
+}
+
+.reveal-label {
+    font-size: 1.3rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3em;
+    color: var(--text-dim);
+    margin-bottom: 0.8rem;
+}
+
+.reveal-name {
+    font-size: 4.5rem;
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+}
+
+.reveal-name.eliminated {
+    color: var(--accent);
+    text-shadow: 0 0 50px var(--accent-glow), 0 0 100px var(--accent-glow);
+    animation: eliminatedPulse 2s ease-in-out infinite;
+}
+
+@keyframes eliminatedPulse {
+    0%, 100% { text-shadow: 0 0 50px var(--accent-glow), 0 0 100px var(--accent-glow); }
+    50%      { text-shadow: 0 0 80px rgba(231,76,60,0.8), 0 0 140px rgba(231,76,60,0.4); }
+}
+
+.reveal-name.safe {
+    color: var(--text-dim);
+}
+
+.reveal-subtitle {
+    font-size: 1.4rem;
+    margin-top: 0.5rem;
+}
+
+.reveal-subtitle.eliminated {
+    color: var(--accent);
+}
+
+.reveal-subtitle.safe {
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+/* Full-screen flash on reveal */
+.screen-flash {
+    position: fixed;
+    inset: 0;
+    background: var(--accent);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 999;
+    animation: screenFlash 0.6s ease-out;
+}
+
+@keyframes screenFlash {
+    0%   { opacity: 0.7; }
+    100% { opacity: 0; }
 }
 
 .hidden { display: none !important; }

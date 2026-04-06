@@ -14,14 +14,16 @@ pub fn assign_roles(player_count: usize) -> Vec<Role> {
 fn build_role_pool(count: usize) -> Vec<Role> {
     let mut roles = Vec::with_capacity(count);
 
-    // Mafia scaling: roughly 1 mafia per 4 players
+    // Mafia scaling per classic Mafia rules:
+    // 6-7: 2, 8-10: 3, 11-13: 4, 14-16: 5, 17-20: 6, 21-25: 7, 26-30: 8
     let mafia_count = match count {
-        6..=8 => 2,
-        9..=11 => 3,
-        12..=16 => 4,
-        17..=22 => 5,
-        23..=27 => 6,
-        _ => 7, // 28-30
+        6..=7 => 2,
+        8..=10 => 3,
+        11..=13 => 4,
+        14..=16 => 5,
+        17..=20 => 6,
+        21..=25 => 7,
+        _ => 8, // 26-30
     };
 
     // Always at least basic mafia
@@ -103,13 +105,21 @@ mod tests {
         let mafia_6 = roles_6.iter().filter(|r| r.faction() == Faction::Mafia).count();
         assert_eq!(mafia_6, 2);
 
+        let roles_8 = assign_roles(8);
+        let mafia_8 = roles_8.iter().filter(|r| r.faction() == Faction::Mafia).count();
+        assert_eq!(mafia_8, 3);
+
         let roles_12 = assign_roles(12);
         let mafia_12 = roles_12.iter().filter(|r| r.faction() == Faction::Mafia).count();
         assert_eq!(mafia_12, 4);
 
+        let roles_15 = assign_roles(15);
+        let mafia_15 = roles_15.iter().filter(|r| r.faction() == Faction::Mafia).count();
+        assert_eq!(mafia_15, 5);
+
         let roles_20 = assign_roles(20);
         let mafia_20 = roles_20.iter().filter(|r| r.faction() == Faction::Mafia).count();
-        assert_eq!(mafia_20, 5);
+        assert_eq!(mafia_20, 6);
     }
 
     #[test]

@@ -65,11 +65,23 @@
                     <p data-i18n="day_description">Talk it out. Who do you suspect?</p>
                 </div>
                 <div id="voting-view" class="phase-view hidden">
-                    <h2 data-i18n="voting_time">Voting Time</h2>
+                    <div class="voting-header">
+                        <div class="voting-icon">⚖️</div>
+                        <h2 data-i18n="voting_time">Voting Time</h2>
+                        <p class="voting-subtitle">Cast your votes now</p>
+                    </div>
                     <div id="vote-bars"></div>
+                    <div id="votes-cast-counter" class="votes-cast-counter"></div>
                 </div>
                 <div id="execution-view" class="phase-view hidden">
-                    <h2 id="execution-message"></h2>
+                    <div id="execution-reveal" class="execution-reveal">
+                        <div id="reveal-countdown" class="reveal-countdown hidden"></div>
+                        <div id="reveal-spotlight" class="reveal-spotlight hidden">
+                            <div id="reveal-label" class="reveal-label"></div>
+                            <div id="reveal-name" class="reveal-name"></div>
+                            <div id="reveal-subtitle" class="reveal-subtitle"></div>
+                        </div>
+                    </div>
                 </div>
                 <div id="gameover-view" class="phase-view hidden">
                     <h2 id="gameover-message"></h2>
