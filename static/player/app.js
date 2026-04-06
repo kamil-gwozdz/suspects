@@ -129,6 +129,9 @@ ws.onMessage((msg) => {
         case 'game_over':
             handleGameOver(msg.payload);
             break;
+        case 'mini_game_prompt':
+            handleMiniGamePrompt(msg.payload);
+            break;
         case 'error':
             handleError(msg.payload);
             break;
@@ -350,4 +353,281 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// ---------------------------------------------------------------------------
+// Mini-game player UI
+// ---------------------------------------------------------------------------
+
+let miniGameTimerInterval = null;
+
+function handleMiniGamePrompt({ game_type, prompt }) {
+    const screen = getOrCreateMiniGameScreen();
+    screen.innerHTML = '';
+
+    switch (game_type) {
+        case 'prisoners_dilemma':
+            renderPrisonerPrompt(screen, prompt);
+            break;
+        case 'trust_circle':
+            renderTrustCirclePrompt(screen, prompt);
+            break;
+        case 'alibi_challenge':
+            renderAlibiPrompt(screen, prompt);
+            break;
+        case 'interrogation':
+            renderInterrogationPrompt(screen, prompt);
+            break;
+        default:
+            screen.innerHTML = `<p>Unknown mini-game: ${game_type}</p>`;
+    }
+
+    showScreen(screen);
+}
+
+function getOrCreateMiniGameScreen() {
+    let el = document.getElementById('minigame-screen');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'minigame-screen';
+        el.className = 'screen';
+        document.getElementById('app').appendChild(el);
+    }
+    return el;
+}
+
+// --- Prisoner's Dilemma ---
+
+function renderPrisonerPrompt(screen, prompt) {
+    const opponentName = prompt.opponent_name || 'another player';
+
+    screen.innerHTML = `
+        <h2 class="mg-player-title">\u{1F91D} Prisoner's Dilemma</h2>
+        <p class="mg-player-desc">You face <strong>${escapeHtml(opponentName)}</strong>.<br>
+        Both cooperate: +2 each. Both betray: -1 each.<br>
+        One betrays: betrayer +3, cooperator -1.</p>
+        <div class="mg-pd-buttons">
+            <button class="mg-btn mg-btn-cooperate" id="mg-cooperate">\u{1F91D}<br>Cooperate</button>
+            <button class="mg-btn mg-btn-betray" id="mg-betray">\u{1F5E1}\uFE0F<br>Betray</button>
+        </div>
+        <p class="mg-player-status" id="mg-pd-status"></p>
+    `;
+
+    document.getElementById('mg-cooperate').addEventListener('click', () => {
+        sendMiniGameAction('prisoners_dilemma', { choice: 'cooperate' });
+        disableMgButtons(screen);
+        document.getElementById('mg-pd-status').textContent = 'You chose Cooperate. Waiting\u2026';
+    });
+
+    document.getElementById('mg-betray').addEventListener('click', () => {
+        sendMiniGameAction('prisoners_dilemma', { choice: 'betray' });
+        disableMgButtons(screen);
+        document.getElementById('mg-pd-status').textContent = 'You chose Betray. Waiting\u2026';
+    });
+}
+
+// --- Trust Circle ---
+
+function renderTrustCirclePrompt(screen, prompt) {
+    const otherPlayers = prompt.players || [];
+    let order = otherPlayers.map((p, i) => ({ ...p, idx: i }));
+
+    screen.innerHTML = `
+        <h2 class="mg-player-title">\u{1F535} Trust Circle</h2>
+        <p class="mg-player-desc">Rank other players from most trusted (top) to least trusted (bottom).<br>
+        Tap \u25B2 \u25BC to reorder.</p>
+        <div class="mg-tc-list" id="mg-tc-list"></div>
+        <button class="btn-primary mg-submit-btn" id="mg-tc-submit">Submit Rankings</button>
+        <p class="mg-player-status" id="mg-tc-status"></p>
+    `;
+
+    const renderList = () => {
+        const container = document.getElementById('mg-tc-list');
+        container.innerHTML = order.map((p, i) => `
+            <div class="mg-tc-item" data-index="${i}">
+                <span class="mg-tc-rank-num">${i + 1}.</span>
+                <span class="mg-tc-item-name">${escapeHtml(p.name)}</span>
+                <span class="mg-tc-arrows">
+                    <button class="mg-arrow-btn" data-dir="up" data-i="${i}" ${i === 0 ? 'disabled' : ''}>\u25B2</button>
+                    <button class="mg-arrow-btn" data-dir="down" data-i="${i}" ${i === order.length - 1 ? 'disabled' : ''}>\u25BC</button>
+                </span>
+            </div>
+        `).join('');
+
+        container.querySelectorAll('.mg-arrow-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const idx = parseInt(btn.dataset.i);
+                const dir = btn.dataset.dir;
+                if (dir === 'up' && idx > 0) {
+                    [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
+                } else if (dir === 'down' && idx < order.length - 1) {
+                    [order[idx], order[idx + 1]] = [order[idx + 1], order[idx]];
+                }
+                renderList();
+            });
+        });
+    };
+
+    renderList();
+
+    document.getElementById('mg-tc-submit').addEventListener('click', () => {
+        const ranked_ids = order.map(p => p.id);
+        sendMiniGameAction('trust_circle', { ranked_player_ids: ranked_ids });
+        document.getElementById('mg-tc-submit').disabled = true;
+        document.getElementById('mg-tc-status').textContent = 'Rankings submitted. Waiting\u2026';
+    });
+}
+
+// --- Alibi Challenge ---
+
+function renderAlibiPrompt(screen, prompt) {
+    const isTarget = prompt.is_target || false;
+    const targetName = prompt.target_name || 'Someone';
+    const timerSecs = prompt.timer_secs || 30;
+
+    if (isTarget) {
+        screen.innerHTML = `
+            <h2 class="mg-player-title">\u{1F526} You're in the Spotlight!</h2>
+            <p class="mg-player-desc">Defend yourself! Others will judge you.</p>
+            <div class="mg-alibi-timer" id="mg-alibi-timer">${timerSecs}</div>
+            <p class="mg-player-status">Speak now \u2014 convince them you're innocent!</p>
+        `;
+        startMiniGameTimer(timerSecs, document.getElementById('mg-alibi-timer'));
+    } else {
+        screen.innerHTML = `
+            <h2 class="mg-player-title">\u{1F526} Alibi Challenge</h2>
+            <p class="mg-player-desc"><strong>${escapeHtml(targetName)}</strong> is defending themselves.</p>
+            <div class="mg-alibi-timer" id="mg-alibi-timer">${timerSecs}</div>
+            <p class="mg-player-desc">Do you believe them?</p>
+            <div class="mg-alibi-vote-btns">
+                <button class="mg-btn mg-btn-thumbsup" id="mg-thumbsup">\u{1F44D}<br>Believe</button>
+                <button class="mg-btn mg-btn-thumbsdown" id="mg-thumbsdown">\u{1F44E}<br>Doubt</button>
+            </div>
+            <p class="mg-player-status" id="mg-alibi-status"></p>
+        `;
+
+        startMiniGameTimer(timerSecs, document.getElementById('mg-alibi-timer'));
+
+        document.getElementById('mg-thumbsup').addEventListener('click', () => {
+            sendMiniGameAction('alibi_challenge', { vote: 'thumbs_up' });
+            disableMgButtons(screen);
+            document.getElementById('mg-alibi-status').textContent = 'You voted \u{1F44D}. Waiting\u2026';
+        });
+
+        document.getElementById('mg-thumbsdown').addEventListener('click', () => {
+            sendMiniGameAction('alibi_challenge', { vote: 'thumbs_down' });
+            disableMgButtons(screen);
+            document.getElementById('mg-alibi-status').textContent = 'You voted \u{1F44E}. Waiting\u2026';
+        });
+    }
+}
+
+// --- Interrogation ---
+
+function renderInterrogationPrompt(screen, prompt) {
+    const role = prompt.role; // 'interrogator' or 'target'
+    const otherName = prompt.other_name || 'a player';
+    const maxQuestions = prompt.max_questions || 3;
+
+    if (role === 'interrogator') {
+        let questionsAsked = 0;
+
+        screen.innerHTML = `
+            <h2 class="mg-player-title">\u{1F50E} Interrogation</h2>
+            <p class="mg-player-desc">Ask <strong>${escapeHtml(otherName)}</strong> up to ${maxQuestions} yes/no questions.</p>
+            <div class="mg-int-input-area">
+                <input type="text" class="mg-int-input" id="mg-int-input" placeholder="Type a yes/no question\u2026" maxlength="200">
+                <button class="btn-primary" id="mg-int-ask">Ask</button>
+            </div>
+            <p class="mg-player-status" id="mg-int-status">Questions remaining: ${maxQuestions}</p>
+        `;
+
+        document.getElementById('mg-int-ask').addEventListener('click', () => {
+            const input = document.getElementById('mg-int-input');
+            const question = input.value.trim();
+            if (!question) return;
+            questionsAsked++;
+            sendMiniGameAction('interrogation', { question, question_number: questionsAsked });
+            input.value = '';
+            const remaining = maxQuestions - questionsAsked;
+            document.getElementById('mg-int-status').textContent = remaining > 0
+                ? `Questions remaining: ${remaining}`
+                : 'All questions asked. Waiting for answers\u2026';
+            if (remaining <= 0) {
+                document.getElementById('mg-int-ask').disabled = true;
+                input.disabled = true;
+            }
+        });
+
+        document.getElementById('mg-int-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') document.getElementById('mg-int-ask').click();
+        });
+
+    } else {
+        // Target role
+        screen.innerHTML = `
+            <h2 class="mg-player-title">\u{1F3AF} You're Being Interrogated</h2>
+            <p class="mg-player-desc"><strong>${escapeHtml(otherName)}</strong> is questioning you.</p>
+            <div class="mg-int-question-display" id="mg-int-question">Waiting for question\u2026</div>
+            <div class="mg-int-answer-btns hidden" id="mg-int-answer-btns">
+                <button class="mg-btn mg-btn-yes" id="mg-int-yes">\u2705<br>Yes</button>
+                <button class="mg-btn mg-btn-no" id="mg-int-no">\u274C<br>No</button>
+            </div>
+            <p class="mg-player-status" id="mg-int-status">Waiting for questions\u2026</p>
+        `;
+
+        // The server will send additional prompts for each question via mini_game_prompt
+        // with prompt.current_question set
+        if (prompt.current_question) {
+            showInterrogationQuestion(prompt.current_question, prompt.question_number || 1);
+        }
+    }
+}
+
+function showInterrogationQuestion(question, questionNum) {
+    const display = document.getElementById('mg-int-question');
+    const btns = document.getElementById('mg-int-answer-btns');
+    if (!display || !btns) return;
+
+    display.textContent = `Q${questionNum}: ${question}`;
+    btns.classList.remove('hidden');
+
+    const yesBtn = document.getElementById('mg-int-yes');
+    const noBtn = document.getElementById('mg-int-no');
+
+    const handler = (answer) => {
+        sendMiniGameAction('interrogation', { answer, question_number: questionNum });
+        btns.classList.add('hidden');
+        document.getElementById('mg-int-status').textContent = `Answered Q${questionNum}. Waiting\u2026`;
+    };
+
+    // Clone and replace to remove old listeners
+    const newYes = yesBtn.cloneNode(true);
+    const newNo = noBtn.cloneNode(true);
+    yesBtn.replaceWith(newYes);
+    noBtn.replaceWith(newNo);
+
+    newYes.addEventListener('click', () => handler(true));
+    newNo.addEventListener('click', () => handler(false));
+}
+
+// --- Helpers ---
+
+function sendMiniGameAction(gameType, action) {
+    ws.send({ type: 'mini_game_action', payload: { game_type: gameType, action } });
+}
+
+function disableMgButtons(container) {
+    container.querySelectorAll('.mg-btn').forEach(btn => { btn.disabled = true; });
+}
+
+function startMiniGameTimer(secs, el) {
+    if (miniGameTimerInterval) clearInterval(miniGameTimerInterval);
+    let remaining = secs;
+    el.textContent = remaining;
+    miniGameTimerInterval = setInterval(() => {
+        remaining--;
+        el.textContent = remaining;
+        if (remaining <= 0) clearInterval(miniGameTimerInterval);
+    }, 1000);
 }
