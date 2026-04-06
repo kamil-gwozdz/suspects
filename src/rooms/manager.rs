@@ -178,14 +178,13 @@ impl Room {
     }
 
     /// Returns `true` if the given action kind is permitted in the current phase.
-    /// `action` should be one of: `"join"`, `"night_action"`, `"vote"`, `"chat"`, `"start"`.
+    /// `action` should be one of: `"join"`, `"night_action"`, `"vote"`, `"start"`.
     pub fn phase_allows_action(&self, action: &str) -> bool {
         match action {
             "join" => self.game_state.phase == GamePhase::Lobby,
             "start" => self.game_state.phase == GamePhase::Lobby,
             "night_action" => self.game_state.phase == GamePhase::Night,
             "vote" => self.game_state.phase == GamePhase::Voting,
-            "chat" => self.game_state.phase == GamePhase::Night,
             _ => false,
         }
     }
@@ -473,7 +472,6 @@ mod tests {
         room.game_state.next_phase(); // Night
         assert!(!room.phase_allows_action("join"));
         assert!(room.phase_allows_action("night_action"));
-        assert!(room.phase_allows_action("chat"));
         assert!(!room.phase_allows_action("vote"));
 
         room.game_state.next_phase(); // Dawn

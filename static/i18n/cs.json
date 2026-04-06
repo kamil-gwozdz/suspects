@@ -33,7 +33,7 @@
   "role_escort": "Každou noc zablokuj noční akci jednoho hráče.",
   "role_vigilante": "V noci můžeš zastřelit jednoho hráče. Používej svou sílu opatrně.",
   "role_mayor": "Odhal svou identitu a získej 3 hlasy, ale už tě nebude možné vyléčit.",
-  "role_spy": "Můžeš vidět noční chat mafie.",
+  "role_spy": "Sbíráš informace o aktivitě mafie.",
   "role_mafioso": "Každou noc hlasuj se svým týmem o vyřazení hráče.",
   "role_godfather": "Veď mafii. Při vyšetřování vypadáš jako nevinný.",
   "role_consort": "Zablokuj noční akci hráče jménem mafie.",
@@ -130,5 +130,6 @@
   "waiting_for_players": "Čekání na další hráče...",
   "game_starting_in": "Hra začíná za {seconds}...",
   "tap_when_ready": "Ťukni, až budeš připraven/a",
-  "placeholder_room_code": "Kód místnosti"
+  "placeholder_room_code": "Kód místnosti",
+  "ready_to_vote": "Připraven hlasovat"
 }

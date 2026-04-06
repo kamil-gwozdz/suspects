@@ -605,46 +605,43 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                     }
                 }
             }
-            ClientMessage::Chat { message } => {
+            ClientMessage::ReadyToVote { ready } => {
                 if let (Some(pid), Some(code)) = (&player_id, &player_room_code) {
                     if let Some(room_arc) = state.get_room(code).await {
-                        let room = room_arc.lock().await;
-
-                        // Validate phase
-                        if !room.phase_allows_action("chat") {
-                            let err = ServerMessage::Error {
-                                message: "Chat is only available during the night phase"
-                                    .to_string(),
-                            };
-                            let _ = tx.send(serde_json::to_string(&err).unwrap());
+                        let mut room = room_arc.lock().await;
+                        if room.game_state.phase != GamePhase::Day {
                             continue;
                         }
-
-                        // Validate message length
-                        if message.trim().is_empty() || message.len() > 500 {
-                            continue;
-                        }
-
                         if let Some(player) = room.get_player(pid) {
-                            // Only mafia can chat during night
-                            if let Some(role) = player.role {
-                                if role.faction() == Faction::Mafia {
-                                    let chat_msg = ServerMessage::ChatMessage {
-                                        sender_name: player.name.clone(),
-                                        message,
-                                    };
-                                    let json = serde_json::to_string(&chat_msg).unwrap();
-                                    // Send to all mafia + spy
-                                    for p in &room.players {
-                                        if let Some(r) = p.role {
-                                            if r.faction() == Faction::Mafia
-                                                || r == crate::game::roles::Role::Spy
-                                            {
-                                                room.send_to_player(&p.id, &json);
-                                            }
-                                        }
-                                    }
-                                }
+                            let name = player.name.clone();
+                            // Track ready-to-vote in votes map (None = ready but no vote yet)
+                            if ready {
+                                room.votes.insert(pid.clone(), None);
+                            } else {
+                                room.votes.remove(pid);
+                            }
+                            let update = ServerMessage::ReadyToVoteUpdate {
+                                player_id: pid.clone(),
+                                player_name: name,
+                                ready,
+                            };
+                            let json = serde_json::to_string(&update).unwrap();
+                            room.send_to_host(&json);
+
+                            // Check if all alive players are ready to vote
+                            let alive = room.alive_players();
+                            let alive_count = alive.len();
+                            let ready_count = alive
+                                .iter()
+                                .filter(|p| room.votes.contains_key(&p.id))
+                                .count();
+                            if ready_count >= alive_count && alive_count >= 2 {
+                                info!(room_code = %code, "All alive players ready to vote, advancing");
+                                room.votes.clear();
+                                let all_ready = ServerMessage::AllReadyToVote;
+                                let json = serde_json::to_string(&all_ready).unwrap();
+                                room.send_to_host(&json);
+                                room.broadcast_to_players(&json);
                             }
                         }
                     }

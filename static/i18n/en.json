@@ -33,7 +33,7 @@
   "role_escort": "Each night, block a player's night action.",
   "role_vigilante": "You can shoot a player at night. Use your power carefully.",
   "role_mayor": "Reveal yourself to gain 3 votes, but you can no longer be healed.",
-  "role_spy": "You can see the mafia's night chat.",
+  "role_spy": "You gather intelligence on Mafia activity.",
   "role_mafioso": "Each night, vote with your team to eliminate a player.",
   "role_godfather": "Lead the mafia. You appear innocent to investigations.",
   "role_consort": "Block a player's night action on behalf of the mafia.",
@@ -130,5 +130,6 @@
   "waiting_for_players": "Waiting for other players...",
   "game_starting_in": "Game starts in {seconds}...",
   "tap_when_ready": "Tap when you're ready",
-  "placeholder_room_code": "Room code"
+  "placeholder_room_code": "Room code",
+  "ready_to_vote": "Ready to Vote"
 }

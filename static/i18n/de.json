@@ -33,7 +33,7 @@
   "role_escort": "Blockiere jede Nacht die Nachtaktion eines Spielers.",
   "role_vigilante": "Du kannst nachts einen Spieler erschießen. Nutze deine Fähigkeit mit Bedacht.",
   "role_mayor": "Offenbare dich, um 3 Stimmen zu erhalten – dafür kannst du nicht mehr geheilt werden.",
-  "role_spy": "Du kannst den Nacht-Chat der Mafia mitlesen.",
+  "role_spy": "Du sammelst Informationen über die Mafia-Aktivität.",
   "role_mafioso": "Stimmt jede Nacht im Team ab, um einen Spieler zu eliminieren.",
   "role_godfather": "Führe die Mafia an. Bei Ermittlungen wirkst du unschuldig.",
   "role_consort": "Blockiere die Nachtaktion eines Spielers im Auftrag der Mafia.",
@@ -130,5 +130,6 @@
   "waiting_for_players": "Warte auf andere Spieler...",
   "game_starting_in": "Spiel startet in {seconds}...",
   "tap_when_ready": "Tippe, wenn du bereit bist",
-  "placeholder_room_code": "Raumcode"
+  "placeholder_room_code": "Raumcode",
+  "ready_to_vote": "Bereit zur Abstimmung"
 }

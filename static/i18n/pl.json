@@ -33,7 +33,7 @@
   "role_escort": "Co noc zablokuj nocną akcję wybranego gracza.",
   "role_vigilante": "Możesz zastrzelić gracza w nocy. Używaj tej mocy ostrożnie.",
   "role_mayor": "Ujawnij się, żeby zyskać 3 głosy, ale nie będzie można cię już uleczyć.",
-  "role_spy": "Możesz podglądać nocny czat mafii.",
+  "role_spy": "Zbierasz informacje o aktywności Mafii.",
   "role_mafioso": "Co noc głosuj ze swoją ekipą, kogo wyeliminować.",
   "role_godfather": "Kierujesz mafią. Wyglądasz na niewinnego podczas przesłuchań.",
   "role_consort": "Zablokuj nocną akcję gracza w imieniu mafii.",
@@ -130,5 +130,6 @@
   "waiting_for_players": "Czekanie na innych graczy...",
   "game_starting_in": "Gra zaczyna się za {seconds}...",
   "tap_when_ready": "Kliknij, gdy jesteś gotowy",
-  "placeholder_room_code": "Kod pokoju"
+  "placeholder_room_code": "Kod pokoju",
+  "ready_to_vote": "Gotowy do głosowania"
 }

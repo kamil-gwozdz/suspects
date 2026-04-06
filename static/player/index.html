@@ -66,6 +66,7 @@
             <h2 data-i18n="discuss">Discuss!</h2>
             <p data-i18n="discuss_desc">Talk with other players. Who is suspicious?</p>
             <div id="day-timer" class="big-timer"></div>
+            <button id="ready-to-vote-btn" class="ready-btn" data-i18n="ready_to_vote">Ready to Vote</button>
         </div>
 
         <!-- Voting Screen -->
@@ -74,15 +75,6 @@
             <div id="vote-target-list" class="target-list"></div>
             <button id="cast-vote-btn" class="btn-primary" disabled data-i18n="vote_btn">Cast Vote</button>
             <button id="skip-vote-btn" class="btn-secondary" data-i18n="abstain">Abstain</button>
-        </div>
-
-        <!-- Chat Screen (mafia) -->
-        <div id="chat-overlay" class="hidden">
-            <div class="chat-messages" id="chat-messages"></div>
-            <div class="chat-input">
-                <input type="text" id="chat-input" placeholder="Message..." autocomplete="off" data-i18n-placeholder="placeholder_message">
-                <button id="chat-send-btn">→</button>
-            </div>
         </div>
 
         <!-- Dead Screen -->

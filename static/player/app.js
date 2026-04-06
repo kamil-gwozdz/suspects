@@ -69,8 +69,8 @@ const confirmActionBtn = document.getElementById('confirm-action-btn');
 const skipActionBtn = document.getElementById('skip-action-btn');
 const castVoteBtn = document.getElementById('cast-vote-btn');
 const skipVoteBtn = document.getElementById('skip-vote-btn');
-const chatSendBtn = document.getElementById('chat-send-btn');
-const chatInput = document.getElementById('chat-input');
+const readyToVoteBtn = document.getElementById('ready-to-vote-btn');
+let isReadyToVote = false;
 
 // Auto-fill saved name and room code from URL
 if (savedName) {
@@ -156,17 +156,12 @@ skipVoteBtn.addEventListener('click', () => {
     castVoteBtn.disabled = true;
 });
 
-chatSendBtn.addEventListener('click', sendChat);
-chatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') sendChat();
+readyToVoteBtn.addEventListener('click', () => {
+    isReadyToVote = !isReadyToVote;
+    readyToVoteBtn.classList.toggle('ready-active', isReadyToVote);
+    readyToVoteBtn.textContent = isReadyToVote ? `✓ ${t('ready_to_vote')}` : t('ready_to_vote');
+    ws.send({ type: 'ready_to_vote', payload: { ready: isReadyToVote } });
 });
-
-function sendChat() {
-    const msg = chatInput.value.trim();
-    if (!msg) return;
-    ws.send({ type: 'chat', payload: { message: msg } });
-    chatInput.value = '';
-}
 
 ws.onMessage((msg) => {
     switch (msg.type) {
@@ -196,9 +191,6 @@ ws.onMessage((msg) => {
             break;
         case 'vote_update':
             break; // Player sees their own vote
-        case 'chat_message':
-            handleChatMessage(msg.payload);
-            break;
         case 'auto_start_countdown':
             handleAutoStartCountdown(msg.payload);
             break;
@@ -343,16 +335,14 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
             confirmActionBtn.textContent = t('confirm');
             skipActionBtn.disabled = false;
             skipActionBtn.textContent = t('skip');
-            // Show mafia chat if mafia
-            if (playerFaction === 'mafia') {
-                document.getElementById('chat-overlay').classList.remove('hidden');
-            }
             // Show sleeping screen — narration will wake us when it's our turn
             showScreen(sleepingScreen);
             break;
         case 'dawn':
         case 'day':
-            document.getElementById('chat-overlay').classList.add('hidden');
+            isReadyToVote = false;
+            readyToVoteBtn.classList.remove('ready-active');
+            readyToVoteBtn.textContent = t('ready_to_vote');
             showScreen(dayScreen);
             if (timer_secs > 0) startTimer(timer_secs, document.getElementById('day-timer'));
             break;
@@ -423,14 +413,6 @@ function handleInvestigation({ target_name, appears_guilty }) {
         ? `🔴 ${t('investigation_suspicious')}`
         : `🟢 ${t('investigation_innocent')}`;
     alert(t('investigation_result', { name: target_name, result }));
-}
-
-function handleChatMessage({ sender_name, message }) {
-    const container = document.getElementById('chat-messages');
-    const p = document.createElement('p');
-    p.innerHTML = `<span class="sender">${escapeHtml(sender_name)}:</span> ${escapeHtml(message)}`;
-    container.appendChild(p);
-    container.scrollTop = container.scrollHeight;
 }
 
 function handleGameOver({ winner, player_roles }) {

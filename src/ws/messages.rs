@@ -27,8 +27,8 @@ pub enum ClientMessage {
     Vote { target_id: Option<String> },
     /// Player toggles ready state
     PlayerReady { ready: bool },
-    /// Player sends a chat message (mafia night chat)
-    Chat { message: String },
+    /// Player signals ready to move to voting phase
+    ReadyToVote { ready: bool },
     /// Host advances to next phase manually
     AdvancePhase,
     /// Player reconnects
@@ -115,11 +115,14 @@ pub enum ServerMessage {
         winner: String,
         player_roles: Vec<PlayerRoleReveal>,
     },
-    /// Chat message (mafia chat)
-    ChatMessage {
-        sender_name: String,
-        message: String,
+    /// Player ready-to-vote state changed (broadcast to host)
+    ReadyToVoteUpdate {
+        player_id: String,
+        player_name: String,
+        ready: bool,
     },
+    /// All alive players ready to vote — auto-transition
+    AllReadyToVote,
     /// Error
     Error { message: String },
     /// Player list update
