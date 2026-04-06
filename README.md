@@ -4,6 +4,25 @@
 
 One screen (TV or computer) displays the main game board. Players join from their phones by scanning a QR code. No app install required.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/host-lobby.png" alt="Host lobby screen" width="700">
+  <br><em>Host lobby — create a room, share the QR code</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/host-night.png" alt="Night phase" width="700">
+  <br><em>Night phase — atmospheric view with stars, moon, and alive player tracker</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/player-join.png" alt="Player join screen" width="250">
+  &nbsp;&nbsp;&nbsp;
+  <img src="docs/screenshots/player-role.png" alt="Player role card" width="250">
+  <br><em>Player screens — join on your phone, receive your secret role</em>
+</p>
+
 ## Features
 
 - **6–30 players** — scales from small gatherings to large parties
