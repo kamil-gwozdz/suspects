@@ -22,6 +22,7 @@ const dayScreen = document.getElementById('day-screen');
 const voteScreen = document.getElementById('vote-screen');
 const deadScreen = document.getElementById('dead-screen');
 const gameoverScreen = document.getElementById('gameover-player-screen');
+const sleepingScreen = document.getElementById('sleeping-screen');
 const reconnectOverlay = document.getElementById('reconnect-overlay');
 
 const joinBtn = document.getElementById('join-btn');
@@ -71,6 +72,7 @@ nameInput.addEventListener('keydown', (e) => {
 confirmActionBtn.addEventListener('click', () => {
     if (selectedTarget) {
         ws.send({ type: 'night_action', payload: { target_id: selectedTarget, secondary_target_id: null } });
+        ws.send({ type: 'narration_ack' });
         confirmActionBtn.disabled = true;
         confirmActionBtn.innerHTML = '<span class="btn-spinner"></span> Confirming…';
         skipActionBtn.disabled = true;
@@ -80,6 +82,7 @@ confirmActionBtn.addEventListener('click', () => {
 
 skipActionBtn.addEventListener('click', () => {
     ws.send({ type: 'night_action', payload: { target_id: null, secondary_target_id: null } });
+    ws.send({ type: 'narration_ack' });
     skipActionBtn.disabled = true;
     skipActionBtn.innerHTML = '<span class="btn-spinner"></span> Skipping…';
     confirmActionBtn.disabled = true;
@@ -127,6 +130,12 @@ ws.onMessage((msg) => {
             break;
         case 'night_action_prompt':
             handleNightPrompt(msg.payload);
+            break;
+        case 'wake_up':
+            handleWakeUp(msg.payload);
+            break;
+        case 'go_to_sleep':
+            handleGoToSleep();
             break;
         case 'investigation_result':
             handleInvestigation(msg.payload);
@@ -193,8 +202,8 @@ function handleReconnectState({ player_id, room_code, phase, round, alive_player
             }
             break;
         case 'night':
-            // Night prompt will follow as a separate message if applicable
-            showScreen(nightScreen);
+            // Show sleeping — if server is waiting for us, wake_up + prompt will follow
+            showScreen(sleepingScreen);
             break;
         case 'dawn':
         case 'day':
@@ -244,11 +253,12 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
             confirmActionBtn.textContent = 'Confirm';
             skipActionBtn.disabled = false;
             skipActionBtn.textContent = 'Skip';
-            // Night screen will be shown when prompt arrives
             // Show mafia chat if mafia
             if (playerFaction === 'mafia') {
                 document.getElementById('chat-overlay').classList.remove('hidden');
             }
+            // Show sleeping screen — narration will wake us when it's our turn
+            showScreen(sleepingScreen);
             break;
         case 'dawn':
         case 'day':
@@ -294,6 +304,26 @@ function handleNightPrompt({ available_targets }) {
     });
 
     showScreen(nightScreen);
+}
+
+function handleWakeUp({ role, instruction }) {
+    // Update instruction text
+    document.getElementById('night-instruction').textContent = instruction;
+    // Reset action buttons
+    confirmActionBtn.disabled = true;
+    confirmActionBtn.textContent = 'Confirm';
+    skipActionBtn.disabled = false;
+    skipActionBtn.textContent = 'Skip';
+    selectedTarget = null;
+    // Play wake-up animation then show the night action screen
+    nightScreen.classList.add('waking-up');
+    showScreen(nightScreen);
+    // Remove animation class after it completes
+    setTimeout(() => nightScreen.classList.remove('waking-up'), 650);
+}
+
+function handleGoToSleep() {
+    showScreen(sleepingScreen);
 }
 
 function handleInvestigation({ target_name, appears_guilty }) {

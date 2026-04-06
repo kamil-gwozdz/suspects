@@ -790,7 +790,7 @@ function handleNarrationStep(payload) {
                 const delay = Math.max(0, remaining) * 1000;
                 setTimeout(() => {
                     hideNarration();
-                    ws.send({ type: 'advance_phase' });
+                    ws.send({ type: 'narration_next' });
                 }, delay);
                 break;
             }
@@ -806,7 +806,7 @@ function handleNarrationStep(payload) {
                 nextBtn.onclick = () => {
                     nextBtn.classList.add('hidden');
                     hideNarration();
-                    ws.send({ type: 'advance_phase' });
+                    ws.send({ type: 'narration_next' });
                 };
                 break;
             }

@@ -41,10 +41,21 @@
 
         <!-- Night Action Screen -->
         <div id="night-screen" class="screen">
-            <h2 data-i18n="night_action">Choose your target</h2>
+            <h2 id="night-instruction" data-i18n="night_action">Choose your target</h2>
             <div id="target-list" class="target-list"></div>
             <button id="confirm-action-btn" class="btn-primary" disabled data-i18n="confirm">Confirm</button>
             <button id="skip-action-btn" class="btn-secondary" data-i18n="skip">Skip</button>
+        </div>
+
+        <!-- Sleeping Screen (night) -->
+        <div id="sleeping-screen" class="screen">
+            <div class="sleeping-moon">🌙</div>
+            <div class="zzz-container">
+                <span class="zzz">💤</span>
+                <span class="zzz">💤</span>
+                <span class="zzz">💤</span>
+            </div>
+            <p class="sleeping-text">Close your eyes...</p>
         </div>
 
         <!-- Day Screen (waiting) -->

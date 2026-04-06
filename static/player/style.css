@@ -343,6 +343,62 @@ body {
 
 .hidden { display: none !important; }
 
+/* ====== Sleeping / Night screens ====== */
+
+#sleeping-screen {
+    background: linear-gradient(180deg, #050510 0%, #0a0a1f 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+.sleeping-moon {
+    font-size: 4rem;
+    animation: moonFloat 3s ease-in-out infinite;
+}
+
+@keyframes moonFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+.zzz-container {
+    display: flex;
+    gap: 0.8rem;
+    margin-top: 1rem;
+}
+
+.zzz {
+    font-size: 1.8rem;
+    opacity: 0;
+    animation: zzzFloat 2.4s ease-in-out infinite;
+}
+
+.zzz:nth-child(2) { animation-delay: 0.6s; }
+.zzz:nth-child(3) { animation-delay: 1.2s; }
+
+@keyframes zzzFloat {
+    0%   { opacity: 0; transform: translate(0, 0) scale(0.8); }
+    40%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(18px, -36px) scale(1.2); }
+}
+
+.sleeping-text {
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    margin-top: 1.5rem;
+    letter-spacing: 0.1em;
+}
+
+/* Wake-up brightening animation on the night-screen */
+#night-screen.waking-up {
+    animation: wakeUpBrighten 0.6s ease-out forwards;
+}
+
+@keyframes wakeUpBrighten {
+    from { filter: brightness(0.2); }
+    to   { filter: brightness(1); }
+}
+
 /* ====== Mini-game player screens ====== */
 
 .mg-player-title {

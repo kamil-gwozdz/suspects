@@ -620,8 +620,10 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
     send_task.abort();
 }
 
+/// Legacy fallback — sends night prompts to all players at once (bypasses narration).
+#[allow(dead_code)]
 fn send_night_prompts(room: &Room) {
-    let alive_targets: Vec<crate::ws::messages::PlayerInfo> = room.alive_players()
+    let alive_targets: Vec<PlayerInfo> = room.alive_players()
         .iter()
         .map(|p| p.to_info())
         .collect();
@@ -640,4 +642,166 @@ fn send_night_prompts(room: &Room) {
             }
         }
     }
+}
+
+/// Build the night narration script and begin executing it.
+fn start_night_narration(room: &mut Room) {
+    let alive_players: Vec<(String, Role)> = room.alive_players()
+        .iter()
+        .filter_map(|p| p.role.map(|r| (p.id.clone(), r)))
+        .collect();
+    let script = build_night_script(&alive_players);
+    room.set_narration_queue(script);
+
+    // Execute the first step
+    if let Some(step) = room.advance_narration() {
+        execute_narration_step(room, &step);
+    } else {
+        // Empty script (e.g. no night roles) — resolve immediately
+        resolve_night_and_advance_to_dawn(room);
+    }
+}
+
+/// Advance to the next narration step and execute it.
+/// If no steps remain, resolve the night and transition to Dawn.
+fn advance_and_execute_narration(room: &mut Room) {
+    if let Some(step) = room.advance_narration() {
+        execute_narration_step(room, &step);
+    } else {
+        resolve_night_and_advance_to_dawn(room);
+    }
+}
+
+/// Send a narration step to the host and handle side effects (wake/sleep/prompt).
+fn execute_narration_step(room: &mut Room, step: &crate::game::narrator::NarrationStep) {
+    // Find player IDs targeted by this step's role
+    let target_player_ids: Vec<String> = if let Some(ref target_role) = step.target_role {
+        room.alive_players()
+            .iter()
+            .filter(|p| p.role.and_then(canonical_wake_role) == Some(*target_role))
+            .map(|p| p.id.clone())
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    // Send NarrationStep to host
+    let host_msg = ServerMessage::NarrationStep {
+        key: step.key.clone(),
+        text: step.text.clone(),
+        audio_file: step.audio_file.clone(),
+        wait_for: step.wait_for.clone(),
+        target_player_id: target_player_ids.first().cloned(),
+    };
+    room.send_to_host(&serde_json::to_string(&host_msg).unwrap());
+
+    // Handle role-specific side effects
+    if step.target_role.is_some() {
+        if step.key.ends_with("_wakes") {
+            // Wake up targeted players
+            for pid in &target_player_ids {
+                if let Some(player) = room.get_player(pid) {
+                    if let Some(role) = player.role {
+                        let wake_msg = ServerMessage::WakeUp {
+                            role: role_display_name(role).to_string(),
+                            instruction: role_instruction(role).to_string(),
+                        };
+                        room.send_to_player(pid, &serde_json::to_string(&wake_msg).unwrap());
+                    }
+                }
+            }
+        } else if step.wait_for == WaitFor::PlayerAction {
+            // Send night action prompts and wait for acks
+            let alive_targets: Vec<PlayerInfo> = room.alive_players()
+                .iter()
+                .map(|p| p.to_info())
+                .collect();
+            for pid in &target_player_ids {
+                let prompt = ServerMessage::NightActionPrompt {
+                    available_targets: alive_targets
+                        .iter()
+                        .filter(|t| t.id != *pid)
+                        .cloned()
+                        .collect(),
+                };
+                room.send_to_player(pid, &serde_json::to_string(&prompt).unwrap());
+            }
+            room.narration_ack_pending = target_player_ids.into_iter().collect();
+        } else if step.key.ends_with("_sleeps") {
+            // Put targeted players back to sleep
+            let sleep_msg = ServerMessage::GoToSleep;
+            let json = serde_json::to_string(&sleep_msg).unwrap();
+            for pid in &target_player_ids {
+                room.send_to_player(pid, &json);
+            }
+        }
+    }
+}
+
+/// Resolve all night actions, apply results, and transition to Dawn.
+fn resolve_night_and_advance_to_dawn(room: &mut Room) {
+    let alive_map: HashMap<String, Role> = room.alive_players()
+        .iter()
+        .filter_map(|p| p.role.map(|r| (p.id.clone(), r)))
+        .collect();
+
+    let result = resolve_night(&room.night_actions, &alive_map);
+
+    // Send investigation results before applying deaths
+    for (target_id, appears_guilty) in &result.investigated {
+        let target_name = room.get_player(target_id)
+            .map(|p| p.name.clone())
+            .unwrap_or_default();
+        for action in &room.night_actions {
+            if action.role == Role::Detective
+                && action.target_id.as_deref() == Some(target_id.as_str())
+            {
+                let inv_msg = ServerMessage::InvestigationResult {
+                    target_name: target_name.clone(),
+                    appears_guilty: *appears_guilty,
+                };
+                room.send_to_player(
+                    &action.actor_id,
+                    &serde_json::to_string(&inv_msg).unwrap(),
+                );
+            }
+        }
+    }
+
+    // Apply deaths
+    let killed_ids = result.killed.clone();
+    for killed_id in &killed_ids {
+        if let Some(player) = room.get_player_mut(killed_id) {
+            player.alive = false;
+        }
+    }
+
+    // Send night results to host
+    let killed_info: Vec<PlayerInfo> = killed_ids
+        .iter()
+        .filter_map(|id| room.get_player(id).map(|p| p.to_info()))
+        .collect();
+    let night_results = ServerMessage::NightResults {
+        killed: killed_info,
+        saved: !result.healed.is_empty(),
+        events: Vec::new(),
+    };
+    room.send_to_host(&serde_json::to_string(&night_results).unwrap());
+
+    // Clear state
+    room.night_actions.clear();
+    room.narration_ack_pending.clear();
+
+    // Transition Night → Dawn
+    let new_phase = room.game_state.next_phase();
+    info!(phase = ?new_phase, round = room.game_state.round, "Night resolved, advancing to Dawn");
+
+    let phase_msg = ServerMessage::PhaseChanged {
+        phase: new_phase,
+        round: room.game_state.round,
+        timer_secs: 0,
+    };
+    let json = serde_json::to_string(&phase_msg).unwrap();
+    room.send_to_host(&json);
+    room.broadcast_to_players(&json);
 }
