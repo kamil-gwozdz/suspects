@@ -15,6 +15,13 @@
             <div class="join-form">
                 <input type="text" id="room-code-input" placeholder="Room code" maxlength="4" autocomplete="off" data-i18n-placeholder="placeholder_room_code" style="text-transform:uppercase; text-align:center; letter-spacing:0.3em; font-size:1.5rem;">
                 <input type="text" id="player-name" placeholder="Your name" maxlength="20" autocomplete="off" data-i18n-placeholder="placeholder_name">
+                <select id="language-select" class="lang-select">
+                    <option value="en">🇬🇧 English</option>
+                    <option value="pl">🇵🇱 Polski</option>
+                    <option value="de">🇩🇪 Deutsch</option>
+                    <option value="cs">🇨🇿 Čeština</option>
+                    <option value="kk">🇰🇿 Қазақша</option>
+                </select>
                 <button id="join-btn" class="btn-primary" data-i18n="join">Join Game</button>
             </div>
             <p id="join-error" class="error-text hidden"></p>
@@ -75,7 +82,6 @@
             <div id="vote-target-list" class="vote-target-list"></div>
             <div class="vote-actions">
                 <button id="cast-vote-btn" class="btn-primary" disabled data-i18n="vote_btn">Cast Vote</button>
-                <button id="skip-vote-btn" class="btn-secondary" data-i18n="abstain">Abstain</button>
             </div>
             <div id="vote-status" class="vote-status"></div>
         </div>

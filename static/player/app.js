@@ -1,6 +1,6 @@
 const params = new URLSearchParams(window.location.search);
 const roomCodeFromUrl = params.get('room');
-const lang = params.get('lang') || localStorage.getItem('suspects_lang') || 'en';
+let lang = params.get('lang') || localStorage.getItem('suspects_lang') || 'en';
 const ws = new WsClient('/ws/player');
 
 let playerId = null;
@@ -12,15 +12,30 @@ let i18nStrings = {};
 let isReady = false;
 let countdownInterval = null;
 
+function loadTranslations(langCode) {
+    return fetch(`/i18n/${langCode}.json`)
+        .then(r => r.ok ? r.json() : {})
+        .catch(() => ({}));
+}
+
 // Load i18n translations, then initialize the app
-fetch(`/i18n/${lang}.json`)
-    .then(r => r.ok ? r.json() : {})
-    .catch(() => ({}))
-    .then(strings => {
-        i18nStrings = strings;
-        applyI18n();
-        initApp();
+loadTranslations(lang).then(strings => {
+    i18nStrings = strings;
+    applyI18n();
+    initApp();
+
+    // Set language selector to current value and listen for changes
+    const langSelect = document.getElementById('language-select');
+    langSelect.value = lang;
+    langSelect.addEventListener('change', () => {
+        lang = langSelect.value;
+        localStorage.setItem('suspects_lang', lang);
+        loadTranslations(lang).then(s => {
+            i18nStrings = s;
+            applyI18n();
+        });
     });
+});
 
 function t(key, params = {}) {
     let str = i18nStrings[key] || key;
@@ -68,7 +83,6 @@ const countdownDisplay = document.getElementById('countdown-display');
 const confirmActionBtn = document.getElementById('confirm-action-btn');
 const skipActionBtn = document.getElementById('skip-action-btn');
 const castVoteBtn = document.getElementById('cast-vote-btn');
-const skipVoteBtn = document.getElementById('skip-vote-btn');
 const readyToVoteBtn = document.getElementById('ready-to-vote-btn');
 let isReadyToVote = false;
 
@@ -108,6 +122,7 @@ joinBtn.addEventListener('click', () => {
     }
 
     localStorage.setItem('suspects_player_name', name);
+    localStorage.setItem('suspects_lang', lang);
     ws.send({ type: 'join_room', payload: { room_code: code, player_name: name } });
     joinBtn.disabled = true;
 });
@@ -146,16 +161,6 @@ castVoteBtn.addEventListener('click', () => {
     if (!selectedTarget) return;
     ws.send({ type: 'vote', payload: { target_id: selectedTarget } });
     castVoteBtn.textContent = t('vote_change');
-});
-
-skipVoteBtn.addEventListener('click', () => {
-    ws.send({ type: 'vote', payload: { target_id: null } });
-    selectedTarget = null;
-    // Deselect all targets visually
-    document.querySelectorAll('.vote-target-btn').forEach(b => b.classList.remove('selected'));
-    castVoteBtn.disabled = true;
-    castVoteBtn.textContent = t('vote_btn');
-    skipVoteBtn.textContent = `✓ ${t('abstain')}`;
 });
 
 readyToVoteBtn.addEventListener('click', () => {
@@ -359,8 +364,6 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
             // Reset vote state for new voting phase
             castVoteBtn.disabled = true;
             castVoteBtn.textContent = t('vote_btn');
-            skipVoteBtn.disabled = false;
-            skipVoteBtn.textContent = t('abstain');
             selectedTarget = null;
             buildVoteTargetList();
             showScreen(voteScreen);
@@ -457,7 +460,6 @@ function buildVoteTargetList() {
             selectedTarget = target.id;
             castVoteBtn.disabled = false;
             castVoteBtn.textContent = t('vote_btn');
-            skipVoteBtn.textContent = t('abstain');
         });
 
         container.appendChild(row);
@@ -537,8 +539,6 @@ function handleError({ message }) {
     skipActionBtn.textContent = t('skip');
     castVoteBtn.disabled = false;
     castVoteBtn.textContent = t('vote_btn');
-    skipVoteBtn.disabled = false;
-    skipVoteBtn.textContent = t('abstain');
 }
 
 function showErrorToast(message) {

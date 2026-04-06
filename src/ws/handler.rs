@@ -1130,6 +1130,14 @@ fn transition_voting_to_execution(room: &mut Room, pool: Option<SqlitePool>) {
 
 /// Count votes, determine the outcome, mark the lynched player dead, and broadcast results.
 fn resolve_and_send_vote_result(room: &mut Room, pool: &Option<SqlitePool>) {
+    // Players who didn't vote, vote for themselves
+    let alive_ids: Vec<String> = room.alive_players().iter().map(|p| p.id.clone()).collect();
+    for pid in &alive_ids {
+        if !room.votes.contains_key(pid) {
+            room.votes.insert(pid.clone(), Some(pid.clone()));
+        }
+    }
+
     let mut vote_counts: HashMap<String, usize> = HashMap::new();
     for target in room.votes.values().flatten() {
         *vote_counts.entry(target.clone()).or_insert(0) += 1;
@@ -1142,14 +1150,44 @@ fn resolve_and_send_vote_result(room: &mut Room, pool: &Option<SqlitePool>) {
         .map(|(id, _)| id.clone())
         .collect();
 
-    // Lynch only if there is one clear leader (no tie)
-    let (target_info, was_lynched) = if top_targets.len() == 1 {
-        let target_id = &top_targets[0];
+    // Resolve ties: Godfather's vote is the tie-breaker
+    let lynch_target = if top_targets.len() == 1 {
+        Some(top_targets[0].clone())
+    } else if top_targets.len() > 1 {
+        // Find the Godfather (or first Mafioso if no Godfather)
+        let godfather_vote = room
+            .players
+            .iter()
+            .filter(|p| p.alive)
+            .find(|p| p.role == Some(crate::game::roles::Role::Godfather))
+            .or_else(|| {
+                room.players
+                    .iter()
+                    .filter(|p| p.alive)
+                    .find(|p| p.role == Some(crate::game::roles::Role::Mafioso))
+            })
+            .and_then(|p| room.votes.get(&p.id).cloned().flatten());
+
+        // If the mafia leader voted for one of the tied targets, that one dies
+        if let Some(ref gf_target) = godfather_vote {
+            if top_targets.contains(gf_target) {
+                Some(gf_target.clone())
+            } else {
+                None // Tie stands — no lynch
+            }
+        } else {
+            None // No mafia leader vote among tied — no lynch
+        }
+    } else {
+        None
+    };
+
+    let (target_info, was_lynched) = if let Some(target_id) = lynch_target {
         let target_name = room
-            .get_player(target_id)
+            .get_player(&target_id)
             .map(|p| p.name.clone())
             .unwrap_or_default();
-        if let Some(player) = room.get_player_mut(target_id) {
+        if let Some(player) = room.get_player_mut(&target_id) {
             player.alive = false;
         }
 
