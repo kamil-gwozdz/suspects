@@ -11,13 +11,14 @@
     <div id="app">
         <!-- Lobby Screen -->
         <div id="lobby-screen" class="screen active">
-            <div class="logo">
-                <h1>SUSPECTS</h1>
-                <p class="subtitle" data-i18n="tagline">Who among you is the traitor?</p>
+            <div class="lobby-header">
+                <div class="logo">
+                    <h1>SUSPECTS</h1>
+                    <p class="subtitle" data-i18n="tagline">"Who among you is the traitor?"</p>
+                </div>
             </div>
-            <div class="lobby-controls">
-                <label for="language-select" data-i18n="select_language">Language:</label>
-                <select id="language-select">
+            <div class="lobby-controls lobby-pre-room">
+                <select id="language-select" class="language-select-subtle">
                     <option value="en">English</option>
                     <option value="pl">Polski</option>
                     <option value="de">Deutsch</option>
@@ -27,20 +28,36 @@
                 <button id="create-room-btn" class="btn-primary" data-i18n="create_room">Create Room</button>
             </div>
             <div id="room-info" class="hidden">
-                <div class="qr-container">
-                    <div id="qr-code"></div>
-                    <p class="room-code">Room: <span id="room-code-display"></span></p>
-                    <p class="join-url" id="join-url"></p>
+                <div class="lobby-main">
+                    <div class="qr-panel">
+                        <div id="qr-code"></div>
+                        <p class="room-code">ROOM: <span id="room-code-display"></span></p>
+                        <p class="join-url" id="join-url"></p>
+                    </div>
+                    <div class="table-area">
+                        <div class="round-table" id="round-table">
+                            <div class="table-center-label">
+                                <span class="table-icon">🪑</span>
+                                <span class="table-text" data-i18n="take_a_seat">Take a seat</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="player-list">
-                    <h2 data-i18n="players">Players</h2>
-                    <ul id="player-list"></ul>
-                    <p class="player-count"><span id="player-count">0</span> / 30</p>
-                    <button id="start-game-btn" class="btn-primary hidden" data-i18n="start_game">▶ Start Game</button>
+                <div class="lobby-footer">
+                    <div class="volume-control">
+                        <label for="volume-slider">🔊</label>
+                        <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.8">
+                    </div>
+                    <div class="player-count-display">
+                        <span id="player-count">0</span> / 30 <span data-i18n="players">players</span>
+                    </div>
                 </div>
-                <div class="volume-control">
-                    <label for="volume-slider">🔊 <span data-i18n="gm_volume">GM Volume</span></label>
-                    <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.8">
+            </div>
+            <!-- Auto-start countdown overlay -->
+            <div id="auto-start-overlay" class="auto-start-overlay hidden">
+                <div class="auto-start-content">
+                    <p class="auto-start-label">Game starts in</p>
+                    <div class="auto-start-number" id="auto-start-number">5</div>
                 </div>
             </div>
         </div>

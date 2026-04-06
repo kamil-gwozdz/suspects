@@ -18,7 +18,6 @@ let narrationActive = false;
 const lobbyScreen = document.getElementById('lobby-screen');
 const gameScreen = document.getElementById('game-screen');
 const createRoomBtn = document.getElementById('create-room-btn');
-const startGameBtn = document.getElementById('start-game-btn');
 const roomInfo = document.getElementById('room-info');
 const languageSelect = document.getElementById('language-select');
 const phaseOverlay = document.getElementById('phase-overlay');
@@ -28,6 +27,12 @@ const narrationOverlay = document.getElementById('narration-overlay');
 const narrationText = document.getElementById('narration-text');
 const narrationNextBtn = document.getElementById('narration-next-btn');
 const gmAudio = document.getElementById('gm-audio');
+const autoStartOverlay = document.getElementById('auto-start-overlay');
+const autoStartNumber = document.getElementById('auto-start-number');
+
+// Ready state tracking
+let playerReadyState = {}; // { player_id: bool }
+let autoStartInterval = null;
 
 // Volume slider wiring
 if (volumeSlider) {
@@ -39,12 +44,6 @@ if (volumeSlider) {
 createRoomBtn.addEventListener('click', () => {
     ws.send({ type: 'create_room', payload: { language: languageSelect.value } });
     createRoomBtn.disabled = true;
-});
-
-startGameBtn.addEventListener('click', () => {
-    ws.send({ type: 'start_game' });
-    startGameBtn.disabled = true;
-    startGameBtn.innerHTML = '<span class="btn-spinner"></span> Starting…';
 });
 
 // Connection lost overlay
@@ -69,6 +68,15 @@ ws.onMessage((msg) => {
             break;
         case 'player_list':
             handlePlayerList(msg.payload);
+            break;
+        case 'player_ready_update':
+            handlePlayerReadyUpdate(msg.payload);
+            break;
+        case 'auto_start_countdown':
+            handleAutoStartCountdown(msg.payload);
+            break;
+        case 'auto_start_cancelled':
+            handleAutoStartCancelled();
             break;
         case 'phase_changed':
             handlePhaseChanged(msg.payload);
@@ -99,12 +107,6 @@ ws.onMessage((msg) => {
             break;
         case 'error':
             showErrorToast(msg.payload.message);
-            // Re-enable start button on error so host can retry
-            startGameBtn.disabled = false;
-            startGameBtn.textContent = startGameBtn.getAttribute('data-i18n') === 'start_game' ? 'Start Game' : startGameBtn.textContent;
-            if (startGameBtn.querySelector('.btn-spinner')) {
-                startGameBtn.innerHTML = 'Start Game';
-            }
             break;
     }
 });
@@ -210,36 +212,154 @@ function handleRoomCreated({ room_code, room_url }) {
             }
         }
     }
-    canvas.style.width = '340px';
-    canvas.style.height = '340px';
+    canvas.style.width = '100%';
+    canvas.style.maxWidth = '280px';
+    canvas.style.height = 'auto';
     canvas.style.imageRendering = 'pixelated';
     qrContainer.appendChild(canvas);
 
     roomInfo.classList.remove('hidden');
-    createRoomBtn.classList.add('hidden');
+    // Hide pre-room controls (language + create button)
+    const preRoom = document.querySelector('.lobby-pre-room');
+    if (preRoom) preRoom.classList.add('hidden');
 }
 
-function handlePlayerJoined({ player_name, player_count }) {
-    if (player_count >= 6) {
-        startGameBtn.classList.remove('hidden');
+function handlePlayerJoined({ player_id, player_name, player_count }) {
+    // Add to players array if not already there
+    if (!players.find(p => p.id === player_id)) {
+        players.push({ id: player_id, name: player_name });
     }
-    document.getElementById('player-count').textContent = player_count;
+    playerReadyState[player_id] = false;
+    document.getElementById('player-count').textContent = player_count || players.length;
+    renderRoundTable();
 }
 
 function handlePlayerLeft({ player_id, player_name }) {
     players = players.filter(p => p.id !== player_id);
-    updatePlayerListUI();
+    delete playerReadyState[player_id];
+    document.getElementById('player-count').textContent = players.length;
+    // Animate removal then re-render
+    const seat = document.querySelector(`.table-seat[data-player-id="${player_id}"]`);
+    if (seat) {
+        seat.classList.add('removing');
+        seat.addEventListener('animationend', () => renderRoundTable());
+    } else {
+        renderRoundTable();
+    }
 }
 
 function handlePlayerList({ players: playerList }) {
     players = playerList;
-    updatePlayerListUI();
+    // Initialize ready state for all players (default not ready)
+    players.forEach(p => {
+        if (!(p.id in playerReadyState)) {
+            playerReadyState[p.id] = p.ready || false;
+        }
+    });
+    document.getElementById('player-count').textContent = players.length;
+    renderRoundTable();
+}
+
+function handlePlayerReadyUpdate({ player_id, player_name, ready }) {
+    playerReadyState[player_id] = ready;
+    // Update the seat visually without full re-render
+    const seat = document.querySelector(`.table-seat[data-player-id="${player_id}"]`);
+    if (seat) {
+        seat.classList.toggle('ready', ready);
+        seat.classList.toggle('not-ready', !ready);
+        const statusEl = seat.querySelector('.seat-status');
+        if (statusEl) statusEl.textContent = ready ? '✓' : '●';
+    }
+}
+
+function handleAutoStartCountdown({ seconds }) {
+    let remaining = seconds;
+    autoStartOverlay.classList.remove('hidden');
+    autoStartNumber.textContent = remaining;
+    autoStartNumber.style.animation = 'none';
+    void autoStartNumber.offsetWidth;
+    autoStartNumber.style.animation = '';
+
+    if (autoStartInterval) clearInterval(autoStartInterval);
+    autoStartInterval = setInterval(() => {
+        remaining--;
+        if (remaining > 0) {
+            autoStartNumber.textContent = remaining;
+            autoStartNumber.style.animation = 'none';
+            void autoStartNumber.offsetWidth;
+            autoStartNumber.style.animation = '';
+        } else {
+            clearInterval(autoStartInterval);
+            autoStartInterval = null;
+            autoStartOverlay.classList.add('hidden');
+            ws.send({ type: 'start_game' });
+        }
+    }, 1000);
+}
+
+function handleAutoStartCancelled() {
+    if (autoStartInterval) {
+        clearInterval(autoStartInterval);
+        autoStartInterval = null;
+    }
+    autoStartOverlay.classList.add('hidden');
+}
+
+// Render players as seats around the round table
+function renderRoundTable() {
+    const table = document.getElementById('round-table');
+    if (!table) return;
+
+    // Remove existing seats
+    table.querySelectorAll('.table-seat').forEach(el => el.remove());
+
+    // Toggle class for many players
+    table.classList.toggle('many-players', players.length > 16);
+
+    // Update center label visibility
+    const centerLabel = table.querySelector('.table-center-label');
+    if (centerLabel) {
+        centerLabel.style.display = players.length === 0 ? '' : 'none';
+    }
+
+    const total = players.length;
+    if (total === 0) return;
+
+    // Use the table's actual size for radius calculation
+    const tableRect = table.getBoundingClientRect();
+    const tableSize = Math.min(tableRect.width, tableRect.height);
+    const radius = tableSize * 0.42; // seats orbit at 42% from center
+
+    players.forEach((p, i) => {
+        const angle = (i / total) * 360 - 90; // Start from top
+        const rad = (angle * Math.PI) / 180;
+        const x = Math.cos(rad) * radius;
+        const y = Math.sin(rad) * radius;
+
+        const isReady = playerReadyState[p.id] || false;
+        const initials = (p.name || '?').charAt(0).toUpperCase();
+
+        const seat = document.createElement('div');
+        seat.className = `table-seat ${isReady ? 'ready' : 'not-ready'}`;
+        seat.dataset.playerId = p.id;
+        const transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+        seat.style.setProperty('--seat-transform', transform);
+        seat.style.transform = transform;
+        seat.style.animationDelay = `${i * 0.05}s`;
+
+        seat.innerHTML = `
+            <div class="seat-avatar">${escapeHtml(initials)}</div>
+            <span class="seat-name">${escapeHtml(p.name)}</span>
+            <span class="seat-status">${isReady ? '✓' : '●'}</span>
+        `;
+
+        table.appendChild(seat);
+    });
 }
 
 function updatePlayerListUI() {
-    const ul = document.getElementById('player-list');
-    ul.innerHTML = players.map(p => `<li>${escapeHtml(p.name)}</li>`).join('');
     document.getElementById('player-count').textContent = players.length;
+    renderRoundTable();
 }
 
 function handlePhaseChanged({ phase, round, timer_secs }) {
