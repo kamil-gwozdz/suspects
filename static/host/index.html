@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suspects — Host</title>
+    <link rel="stylesheet" href="/shared/common.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Lobby Screen -->
+        <div id="lobby-screen" class="screen active">
+            <div class="logo">
+                <h1>SUSPECTS</h1>
+                <p class="subtitle" data-i18n="tagline">Who among you is the traitor?</p>
+            </div>
+            <div class="lobby-controls">
+                <label for="language-select" data-i18n="select_language">Language:</label>
+                <select id="language-select">
+                    <option value="en">English</option>
+                    <option value="pl">Polski</option>
+                    <option value="de">Deutsch</option>
+                    <option value="cs">Čeština</option>
+                    <option value="kk">Қазақша</option>
+                </select>
+                <button id="create-room-btn" class="btn-primary" data-i18n="create_room">Create Room</button>
+            </div>
+            <div id="room-info" class="hidden">
+                <div class="qr-container">
+                    <div id="qr-code"></div>
+                    <p class="room-code">Room: <span id="room-code-display"></span></p>
+                    <p class="join-url" id="join-url"></p>
+                </div>
+                <div class="player-list">
+                    <h2 data-i18n="players">Players</h2>
+                    <ul id="player-list"></ul>
+                    <p class="player-count"><span id="player-count">0</span> / 30</p>
+                </div>
+                <button id="start-game-btn" class="btn-primary hidden" data-i18n="start_game">Start Game</button>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="screen">
+            <div class="game-header">
+                <span class="round-display" data-i18n="round">Round</span> <span id="round-number">1</span>
+                <span class="phase-display" id="phase-display">Night</span>
+                <span class="timer" id="timer-display"></span>
+            </div>
+            <div class="game-content">
+                <div id="night-view" class="phase-view">
+                    <div class="moon-icon">🌙</div>
+                    <h2 data-i18n="night_falls">Night falls on the town...</h2>
+                    <p data-i18n="night_description">The suspects are making their moves.</p>
+                </div>
+                <div id="dawn-view" class="phase-view hidden">
+                    <div class="sun-icon">🌅</div>
+                    <h2 id="dawn-message" data-i18n="dawn_breaks">Dawn breaks...</h2>
+                    <div id="death-announcements"></div>
+                </div>
+                <div id="day-view" class="phase-view hidden">
+                    <div class="sun-icon">☀️</div>
+                    <h2 data-i18n="day_discussion">Time to discuss</h2>
+                    <p data-i18n="day_description">Talk it out. Who do you suspect?</p>
+                </div>
+                <div id="voting-view" class="phase-view hidden">
+                    <h2 data-i18n="voting_time">Voting Time</h2>
+                    <div id="vote-bars"></div>
+                </div>
+                <div id="execution-view" class="phase-view hidden">
+                    <h2 id="execution-message"></h2>
+                </div>
+                <div id="gameover-view" class="phase-view hidden">
+                    <h2 id="gameover-message"></h2>
+                    <div id="role-reveals"></div>
+                </div>
+            </div>
+            <div class="alive-players">
+                <h3 data-i18n="alive">Alive</h3>
+                <ul id="alive-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+    <script src="/shared/ws.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
