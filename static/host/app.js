@@ -190,9 +190,30 @@ function handleRoomCreated({ room_code, room_url }) {
     // Generate QR code
     const qrContainer = document.getElementById('qr-code');
     qrContainer.innerHTML = '';
-    QRCode.toCanvas(fullUrl, { width: 200, margin: 2, color: { dark: '#e74c3c', light: '#0a0a0f' } }, (err, canvas) => {
-        if (!err) qrContainer.appendChild(canvas);
-    });
+    const qr = qrcode(0, 'M');
+    qr.addData(fullUrl);
+    qr.make();
+    const canvas = document.createElement('canvas');
+    const cellSize = 4;
+    const margin = 2;
+    const size = qr.getModuleCount() * cellSize + margin * 2;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0a0a0f';
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#e74c3c';
+    for (let r = 0; r < qr.getModuleCount(); r++) {
+        for (let c = 0; c < qr.getModuleCount(); c++) {
+            if (qr.isDark(r, c)) {
+                ctx.fillRect(c * cellSize + margin, r * cellSize + margin, cellSize, cellSize);
+            }
+        }
+    }
+    canvas.style.width = '200px';
+    canvas.style.height = '200px';
+    canvas.style.imageRendering = 'pixelated';
+    qrContainer.appendChild(canvas);
 
     roomInfo.classList.remove('hidden');
     createRoomBtn.classList.add('hidden');

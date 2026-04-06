@@ -5,15 +5,20 @@ use axum::{
     },
     response::IntoResponse,
 };
+use std::collections::HashMap;
 use futures::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use tracing::{info, warn, error};
 
 use crate::rooms::manager::{AppState, Room, MAX_PLAYERS};
-use crate::ws::messages::{ClientMessage, ServerMessage};
+use crate::ws::messages::{ClientMessage, ServerMessage, PlayerInfo};
 use crate::game::scaling::assign_roles;
-use crate::game::roles::Faction;
+use crate::game::roles::{Faction, Role};
 use crate::game::state::GamePhase;
+use crate::game::narrator::{
+    build_night_script, canonical_wake_role, role_display_name, role_instruction, WaitFor,
+};
+use crate::game::phases::resolve_night;
 
 pub async fn host_ws_handler(
     ws: WebSocketUpgrade,
@@ -172,10 +177,18 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                         let _ = tx.send(json.clone());
                         room.broadcast_to_players(&json);
 
-                        // Send night action prompts if entering night
+                        // Start narration-driven night flow
                         if new_phase == GamePhase::Night {
-                            send_night_prompts(&room);
+                            start_night_narration(&mut room);
                         }
+                    }
+                }
+            }
+            ClientMessage::NarrationNext => {
+                if let Some(ref code) = room_code {
+                    if let Some(room_arc) = state.get_room(code).await {
+                        let mut room = room_arc.lock().await;
+                        advance_and_execute_narration(&mut room);
                     }
                 }
             }
@@ -519,13 +532,20 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                     };
                     let _ = tx.send(serde_json::to_string(&reconnect_msg).unwrap());
 
-                    // If night phase and player has night action, send prompt
+                    // If night phase and player is being waited for, re-send wake + prompt
                     if snapshot.phase == GamePhase::Night
                         && player_alive
                     {
-                        if let Some(r) = role {
-                            if r.has_night_action() {
-                                let alive_targets: Vec<crate::ws::messages::PlayerInfo> = room.alive_players()
+                        if room.narration_ack_pending.contains(&pid) {
+                            // Player is currently expected to act — re-send WakeUp + prompt
+                            if let Some(r) = role {
+                                let wake_msg = ServerMessage::WakeUp {
+                                    role: role_display_name(r).to_string(),
+                                    instruction: role_instruction(r).to_string(),
+                                };
+                                let _ = tx.send(serde_json::to_string(&wake_msg).unwrap());
+
+                                let alive_targets: Vec<PlayerInfo> = room.alive_players()
                                     .iter()
                                     .filter(|p| p.id != pid)
                                     .map(|p| p.to_info())
@@ -555,6 +575,24 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                 } else {
                     let err = ServerMessage::Error { message: "Room not found".to_string() };
                     let _ = tx.send(serde_json::to_string(&err).unwrap());
+                }
+            }
+            ClientMessage::NarrationAck => {
+                if let (Some(pid), Some(code)) = (&player_id, &player_room_code) {
+                    if let Some(room_arc) = state.get_room(code).await {
+                        let mut room = room_arc.lock().await;
+
+                        if !room.narration_ack_pending.remove(pid) {
+                            continue; // not waiting for this player
+                        }
+
+                        info!(room_code = %code, player_id = %pid, "Narration ack received");
+
+                        if room.narration_ack_pending.is_empty() {
+                            // All expected acks received — advance narration
+                            advance_and_execute_narration(&mut room);
+                        }
+                    }
                 }
             }
             _ => {}

@@ -41,7 +41,7 @@ const WAKE_ORDER: &[Role] = &[
 ];
 
 /// Returns the display name used in narration for a given role.
-fn role_display_name(role: Role) -> &'static str {
+pub fn role_display_name(role: Role) -> &'static str {
     match role {
         Role::Escort => "Escort",
         Role::Consort => "Consort",
@@ -83,7 +83,7 @@ fn role_key(role: Role) -> &'static str {
 }
 
 /// Returns the night-action instruction text spoken by the GM for a role.
-fn role_instruction(role: Role) -> &'static str {
+pub fn role_instruction(role: Role) -> &'static str {
     match role {
         Role::Escort => "Choose someone to distract tonight.",
         Role::Consort => "Choose someone to distract tonight.",
@@ -99,7 +99,7 @@ fn role_instruction(role: Role) -> &'static str {
 
 /// Returns the canonical wake-order role for a given role.
 /// Godfather and Janitor act during the Mafia wake slot.
-fn canonical_wake_role(role: Role) -> Option<Role> {
+pub fn canonical_wake_role(role: Role) -> Option<Role> {
     match role {
         Role::Escort => Some(Role::Escort),
         Role::Consort => Some(Role::Consort),

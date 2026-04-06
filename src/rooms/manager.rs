@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::{Mutex, RwLock};
@@ -8,6 +9,7 @@ use rand::Rng;
 
 use crate::game::state::{GamePhase, GameState};
 use crate::game::roles::Role;
+use crate::game::narrator::NarrationStep;
 use crate::ws::messages::PlayerInfo;
 
 /// Maximum number of players allowed in a single room.
@@ -47,6 +49,12 @@ pub struct Room {
     pub created_at: Instant,
     /// When the host disconnected; `None` if host is connected.
     pub host_disconnected_at: Option<Instant>,
+    /// Remaining narration steps to execute.
+    pub narration_queue: Vec<NarrationStep>,
+    /// The currently active narration step.
+    pub narration_current: Option<NarrationStep>,
+    /// Player IDs we are waiting for before advancing narration.
+    pub narration_ack_pending: HashSet<String>,
 }
 
 impl Room {
@@ -63,6 +71,9 @@ impl Room {
             night_actions: Vec::new(),
             created_at: Instant::now(),
             host_disconnected_at: None,
+            narration_queue: Vec::new(),
+            narration_current: None,
+            narration_ack_pending: HashSet::new(),
         }
     }
 
@@ -165,6 +176,25 @@ impl Room {
                 let _ = tx.send(msg.to_string());
             }
         }
+    }
+
+    /// Load a new narration script into the queue.
+    pub fn set_narration_queue(&mut self, steps: Vec<NarrationStep>) {
+        self.narration_queue = steps;
+        self.narration_current = None;
+        self.narration_ack_pending.clear();
+    }
+
+    /// Pop the next step from the narration queue.
+    /// Returns `None` when the script is finished.
+    pub fn advance_narration(&mut self) -> Option<NarrationStep> {
+        if self.narration_queue.is_empty() {
+            self.narration_current = None;
+            return None;
+        }
+        let step = self.narration_queue.remove(0);
+        self.narration_current = Some(step.clone());
+        Some(step)
     }
 }
 

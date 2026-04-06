@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use crate::game::roles::Role;
 use crate::game::state::GamePhase;
 use crate::game::minigames::MiniGameType;
+use crate::game::narrator::WaitFor;
 
 /// Messages sent from clients (host or player) to the server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,6 +29,8 @@ pub enum ClientMessage {
     MiniGameAction { game_type: MiniGameType, action: serde_json::Value },
     /// Player signals they are done with their night action
     NarrationAck,
+    /// Host signals ready for next narration step
+    NarrationNext,
 }
 
 /// Messages sent from the server to clients.
@@ -92,7 +95,7 @@ pub enum ServerMessage {
         key: String,
         text: String,
         audio_file: String,
-        wait_for: String,
+        wait_for: WaitFor,
         target_player_id: Option<String>,
     },
     /// Sent to a specific player when their role is woken up
