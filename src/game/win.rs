@@ -7,8 +7,8 @@ pub enum Winner {
     Town,
     Mafia,
     SerialKiller,
-    Jester(String),       // player_id of Jester
-    Executioner(String),  // player_id of Executioner
+    Jester(String),      // player_id of Jester
+    Executioner(String), // player_id of Executioner
     Draw,
 }
 
@@ -22,8 +22,14 @@ pub struct PlayerState {
 pub fn check_win(players: &[PlayerState]) -> Option<Winner> {
     let alive: Vec<&PlayerState> = players.iter().filter(|p| p.alive).collect();
 
-    let town_alive = alive.iter().filter(|p| p.role.faction() == Faction::Town).count();
-    let mafia_alive = alive.iter().filter(|p| p.role.faction() == Faction::Mafia).count();
+    let town_alive = alive
+        .iter()
+        .filter(|p| p.role.faction() == Faction::Town)
+        .count();
+    let mafia_alive = alive
+        .iter()
+        .filter(|p| p.role.faction() == Faction::Mafia)
+        .count();
     let sk_alive = alive.iter().any(|p| p.role == Role::SerialKiller);
 
     // Serial Killer wins if they're the last one standing
@@ -73,7 +79,11 @@ mod tests {
     use super::*;
 
     fn p(id: &str, role: Role, alive: bool) -> PlayerState {
-        PlayerState { id: id.to_string(), role, alive }
+        PlayerState {
+            id: id.to_string(),
+            role,
+            alive,
+        }
     }
 
     #[test]
@@ -111,7 +121,10 @@ mod tests {
     #[test]
     fn test_jester_wins_on_lynch() {
         let jester = p("5", Role::Jester, true);
-        assert_eq!(check_jester_win(&jester), Some(Winner::Jester("5".to_string())));
+        assert_eq!(
+            check_jester_win(&jester),
+            Some(Winner::Jester("5".to_string()))
+        );
     }
 
     #[test]

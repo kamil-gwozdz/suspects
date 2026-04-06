@@ -1,6 +1,6 @@
+use super::roles::Role;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use super::roles::Role;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NightAction {
@@ -72,10 +72,11 @@ pub fn resolve_night(
             result.killed.push(target.to_string());
 
             // Check if Janitor cleaned
-            let janitor_cleaned = actions
-                .iter()
-                .any(|a| a.role == Role::Janitor && !is_blocked(&a.actor_id)
-                    && a.target_id.as_deref() == Some(target));
+            let janitor_cleaned = actions.iter().any(|a| {
+                a.role == Role::Janitor
+                    && !is_blocked(&a.actor_id)
+                    && a.target_id.as_deref() == Some(target)
+            });
             if janitor_cleaned {
                 result.cleaned.push(target.to_string());
             }
@@ -83,7 +84,10 @@ pub fn resolve_night(
     }
 
     // 5. Serial Killer kill
-    for action in actions.iter().filter(|a| a.role == Role::SerialKiller && !is_blocked(&a.actor_id)) {
+    for action in actions
+        .iter()
+        .filter(|a| a.role == Role::SerialKiller && !is_blocked(&a.actor_id))
+    {
         if let Some(ref target) = action.target_id {
             let is_healed = heal_target.as_deref() == Some(target.as_str());
             if !is_healed && !result.killed.contains(target) {
@@ -93,7 +97,10 @@ pub fn resolve_night(
     }
 
     // 6. Vigilante kill
-    for action in actions.iter().filter(|a| a.role == Role::Vigilante && !is_blocked(&a.actor_id)) {
+    for action in actions
+        .iter()
+        .filter(|a| a.role == Role::Vigilante && !is_blocked(&a.actor_id))
+    {
         if let Some(ref target) = action.target_id {
             let is_healed = heal_target.as_deref() == Some(target.as_str());
             if !is_healed && !result.killed.contains(target) {
@@ -103,7 +110,10 @@ pub fn resolve_night(
     }
 
     // 7. Detective investigation
-    for action in actions.iter().filter(|a| a.role == Role::Detective && !is_blocked(&a.actor_id)) {
+    for action in actions
+        .iter()
+        .filter(|a| a.role == Role::Detective && !is_blocked(&a.actor_id))
+    {
         if let Some(ref target) = action.target_id {
             let target_role = alive_players.get(target.as_str());
             // Godfather appears innocent
@@ -147,8 +157,18 @@ mod tests {
     fn test_mafia_kills_civilian() {
         let players = make_players();
         let actions = vec![
-            NightAction { actor_id: "m1".into(), role: Role::Mafioso, target_id: Some("p1".into()), secondary_target_id: None },
-            NightAction { actor_id: "m2".into(), role: Role::Mafioso, target_id: Some("p1".into()), secondary_target_id: None },
+            NightAction {
+                actor_id: "m1".into(),
+                role: Role::Mafioso,
+                target_id: Some("p1".into()),
+                secondary_target_id: None,
+            },
+            NightAction {
+                actor_id: "m2".into(),
+                role: Role::Mafioso,
+                target_id: Some("p1".into()),
+                secondary_target_id: None,
+            },
         ];
         let result = resolve_night(&actions, &players);
         assert!(result.killed.contains(&"p1".to_string()));
@@ -158,8 +178,18 @@ mod tests {
     fn test_doctor_saves() {
         let players = make_players();
         let actions = vec![
-            NightAction { actor_id: "m1".into(), role: Role::Mafioso, target_id: Some("p1".into()), secondary_target_id: None },
-            NightAction { actor_id: "p3".into(), role: Role::Doctor, target_id: Some("p1".into()), secondary_target_id: None },
+            NightAction {
+                actor_id: "m1".into(),
+                role: Role::Mafioso,
+                target_id: Some("p1".into()),
+                secondary_target_id: None,
+            },
+            NightAction {
+                actor_id: "p3".into(),
+                role: Role::Doctor,
+                target_id: Some("p1".into()),
+                secondary_target_id: None,
+            },
         ];
         let result = resolve_night(&actions, &players);
         assert!(!result.killed.contains(&"p1".to_string()));
@@ -169,9 +199,12 @@ mod tests {
     #[test]
     fn test_detective_finds_mafia() {
         let players = make_players();
-        let actions = vec![
-            NightAction { actor_id: "p4".into(), role: Role::Detective, target_id: Some("m1".into()), secondary_target_id: None },
-        ];
+        let actions = vec![NightAction {
+            actor_id: "p4".into(),
+            role: Role::Detective,
+            target_id: Some("m1".into()),
+            secondary_target_id: None,
+        }];
         let result = resolve_night(&actions, &players);
         assert_eq!(result.investigated, vec![("m1".to_string(), true)]);
     }
@@ -180,9 +213,12 @@ mod tests {
     fn test_godfather_appears_innocent() {
         let mut players = make_players();
         players.insert("gf".to_string(), Role::Godfather);
-        let actions = vec![
-            NightAction { actor_id: "p4".into(), role: Role::Detective, target_id: Some("gf".into()), secondary_target_id: None },
-        ];
+        let actions = vec![NightAction {
+            actor_id: "p4".into(),
+            role: Role::Detective,
+            target_id: Some("gf".into()),
+            secondary_target_id: None,
+        }];
         let result = resolve_night(&actions, &players);
         assert_eq!(result.investigated, vec![("gf".to_string(), false)]);
     }
@@ -191,8 +227,18 @@ mod tests {
     fn test_escort_blocks_mafia() {
         let players = make_players();
         let actions = vec![
-            NightAction { actor_id: "m1".into(), role: Role::Mafioso, target_id: Some("p1".into()), secondary_target_id: None },
-            NightAction { actor_id: "p1".into(), role: Role::Escort, target_id: Some("m1".into()), secondary_target_id: None },
+            NightAction {
+                actor_id: "m1".into(),
+                role: Role::Mafioso,
+                target_id: Some("p1".into()),
+                secondary_target_id: None,
+            },
+            NightAction {
+                actor_id: "p1".into(),
+                role: Role::Escort,
+                target_id: Some("m1".into()),
+                secondary_target_id: None,
+            },
         ];
         // m1 blocked, only m1 voted so no kill
         let result = resolve_night(&actions, &players);
@@ -203,9 +249,12 @@ mod tests {
     fn test_serial_killer_immune_to_mafia() {
         let mut players = make_players();
         players.insert("sk".to_string(), Role::SerialKiller);
-        let actions = vec![
-            NightAction { actor_id: "m1".into(), role: Role::Mafioso, target_id: Some("sk".into()), secondary_target_id: None },
-        ];
+        let actions = vec![NightAction {
+            actor_id: "m1".into(),
+            role: Role::Mafioso,
+            target_id: Some("sk".into()),
+            secondary_target_id: None,
+        }];
         let result = resolve_night(&actions, &players);
         assert!(!result.killed.contains(&"sk".to_string()));
     }

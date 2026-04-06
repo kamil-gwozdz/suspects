@@ -1,7 +1,4 @@
-use axum::{
-    Router,
-    routing::get,
-};
+use axum::{Router, routing::get};
 use sqlx::sqlite::SqlitePoolOptions;
 #[cfg(debug_assertions)]
 use tower_http::services::ServeDir;
@@ -21,7 +18,7 @@ struct StaticAssets;
 #[cfg(not(debug_assertions))]
 async fn serve_embedded(uri: axum::http::Uri) -> axum::response::Response {
     use axum::body::Body;
-    use axum::http::{header, StatusCode};
+    use axum::http::{StatusCode, header};
 
     let path = uri.path().trim_start_matches('/');
 
@@ -89,7 +86,10 @@ async fn main() {
     {
         let loaded = db::load_active_games(&pool).await;
         if !loaded.is_empty() {
-            tracing::info!(count = loaded.len(), "Restoring in-progress games from database");
+            tracing::info!(
+                count = loaded.len(),
+                "Restoring in-progress games from database"
+            );
             for game in loaded {
                 let code = game.code.clone();
                 let room = rooms::manager::Room::from_loaded(game);
@@ -107,9 +107,15 @@ async fn main() {
             let abandon_threshold = std::time::Duration::from_secs(10 * 60);
             loop {
                 tokio::time::sleep(cleanup_interval).await;
-                let removed = cleanup_state.remove_abandoned_rooms(abandon_threshold).await;
+                let removed = cleanup_state
+                    .remove_abandoned_rooms(abandon_threshold)
+                    .await;
                 if !removed.is_empty() {
-                    tracing::info!(count = removed.len(), "Cleaned up abandoned rooms: {:?}", removed);
+                    tracing::info!(
+                        count = removed.len(),
+                        "Cleaned up abandoned rooms: {:?}",
+                        removed
+                    );
                 }
             }
         });
@@ -118,7 +124,10 @@ async fn main() {
     let app = Router::new()
         .route("/ws/host", get(ws::handler::host_ws_handler))
         .route("/ws/player", get(ws::handler::player_ws_handler))
-        .route("/", get(|| async { axum::response::Redirect::permanent("/host/") }));
+        .route(
+            "/",
+            get(|| async { axum::response::Redirect::permanent("/host/") }),
+        );
 
     // Debug: serve static files from disk (supports hot reload).
     // Release: serve embedded static files from the binary.
@@ -139,4 +148,3 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
-

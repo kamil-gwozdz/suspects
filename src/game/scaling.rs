@@ -102,23 +102,38 @@ mod tests {
     #[test]
     fn test_mafia_scaling() {
         let roles_6 = assign_roles(6);
-        let mafia_6 = roles_6.iter().filter(|r| r.faction() == Faction::Mafia).count();
+        let mafia_6 = roles_6
+            .iter()
+            .filter(|r| r.faction() == Faction::Mafia)
+            .count();
         assert_eq!(mafia_6, 2);
 
         let roles_8 = assign_roles(8);
-        let mafia_8 = roles_8.iter().filter(|r| r.faction() == Faction::Mafia).count();
+        let mafia_8 = roles_8
+            .iter()
+            .filter(|r| r.faction() == Faction::Mafia)
+            .count();
         assert_eq!(mafia_8, 3);
 
         let roles_12 = assign_roles(12);
-        let mafia_12 = roles_12.iter().filter(|r| r.faction() == Faction::Mafia).count();
+        let mafia_12 = roles_12
+            .iter()
+            .filter(|r| r.faction() == Faction::Mafia)
+            .count();
         assert_eq!(mafia_12, 4);
 
         let roles_15 = assign_roles(15);
-        let mafia_15 = roles_15.iter().filter(|r| r.faction() == Faction::Mafia).count();
+        let mafia_15 = roles_15
+            .iter()
+            .filter(|r| r.faction() == Faction::Mafia)
+            .count();
         assert_eq!(mafia_15, 5);
 
         let roles_20 = assign_roles(20);
-        let mafia_20 = roles_20.iter().filter(|r| r.faction() == Faction::Mafia).count();
+        let mafia_20 = roles_20
+            .iter()
+            .filter(|r| r.faction() == Faction::Mafia)
+            .count();
         assert_eq!(mafia_20, 6);
     }
 
@@ -126,8 +141,16 @@ mod tests {
     fn test_always_has_doctor_and_detective() {
         for count in 6..=30 {
             let roles = assign_roles(count);
-            assert!(roles.contains(&Role::Doctor), "No Doctor for {} players", count);
-            assert!(roles.contains(&Role::Detective), "No Detective for {} players", count);
+            assert!(
+                roles.contains(&Role::Doctor),
+                "No Doctor for {} players",
+                count
+            );
+            assert!(
+                roles.contains(&Role::Detective),
+                "No Detective for {} players",
+                count
+            );
         }
     }
 

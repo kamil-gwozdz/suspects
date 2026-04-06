@@ -5,24 +5,24 @@ use axum::{
     },
     response::IntoResponse,
 };
-use std::collections::HashMap;
 use futures::{SinkExt, StreamExt};
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
-use crate::rooms::manager::{AppState, Room, MAX_PLAYERS};
-use crate::ws::messages::{ClientMessage, ServerMessage, PlayerInfo};
-use crate::game::scaling::assign_roles;
-use crate::game::roles::{Faction, Role};
-use crate::game::state::GamePhase;
-use crate::game::narrator::{
-    build_night_script, build_dawn_script, build_voting_script,
-    canonical_wake_role, role_display_name, role_instruction, WaitFor,
-};
-use crate::game::phases::resolve_night;
 use crate::db;
 use crate::db::RoomSnapshot;
+use crate::game::narrator::{
+    WaitFor, build_dawn_script, build_night_script, build_voting_script, canonical_wake_role,
+    role_display_name, role_instruction,
+};
+use crate::game::phases::resolve_night;
+use crate::game::roles::{Faction, Role};
+use crate::game::scaling::assign_roles;
+use crate::game::state::GamePhase;
+use crate::rooms::manager::{AppState, MAX_PLAYERS, Room};
+use crate::ws::messages::{ClientMessage, PlayerInfo, ServerMessage};
 
 pub async fn host_ws_handler(
     ws: WebSocketUpgrade,
@@ -59,7 +59,9 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
 
         let Ok(client_msg) = serde_json::from_str::<ClientMessage>(text) else {
             warn!("Host sent invalid message format");
-            let err = ServerMessage::Error { message: "Invalid message format".to_string() };
+            let err = ServerMessage::Error {
+                message: "Invalid message format".to_string(),
+            };
             let _ = tx.send(serde_json::to_string(&err).unwrap());
             continue;
         };
@@ -129,7 +131,10 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                                     description_key: role.description_key().to_string(),
                                     faction: format!("{:?}", role.faction()),
                                 };
-                                room.send_to_player(&player.id, &serde_json::to_string(&msg).unwrap());
+                                room.send_to_player(
+                                    &player.id,
+                                    &serde_json::to_string(&msg).unwrap(),
+                                );
                             }
                         }
 
@@ -181,9 +186,7 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
 
                         // Voting timer expired while narration is active —
                         // resolve votes instead of blindly advancing the phase.
-                        if room.game_state.phase == GamePhase::Voting
-                            && room.narration_active()
-                        {
+                        if room.game_state.phase == GamePhase::Voting && room.narration_active() {
                             info!(room_code = %code, "Voting timer expired, resolving votes");
                             handle_voting_complete(&mut room, Some(state.pool.clone()));
                             continue;
@@ -210,7 +213,9 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
 
                         // Phase-specific narration flows
                         match new_phase {
-                            GamePhase::Night => start_night_narration(&mut room, Some(state.pool.clone())),
+                            GamePhase::Night => {
+                                start_night_narration(&mut room, Some(state.pool.clone()))
+                            }
                             GamePhase::Voting => start_voting_narration(&mut room),
                             _ => {}
                         }
@@ -251,7 +256,8 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                 && room.game_state.phase != GamePhase::GameOver
             {
                 let msg = ServerMessage::Error {
-                    message: "Host disconnected — game paused. Waiting for host to reconnect...".to_string(),
+                    message: "Host disconnected — game paused. Waiting for host to reconnect..."
+                        .to_string(),
                 };
                 room.broadcast_to_players(&serde_json::to_string(&msg).unwrap());
             }
@@ -282,13 +288,18 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
 
         let Ok(client_msg) = serde_json::from_str::<ClientMessage>(text) else {
             warn!("Player sent invalid message format");
-            let err = ServerMessage::Error { message: "Invalid message format".to_string() };
+            let err = ServerMessage::Error {
+                message: "Invalid message format".to_string(),
+            };
             let _ = tx.send(serde_json::to_string(&err).unwrap());
             continue;
         };
 
         match client_msg {
-            ClientMessage::JoinRoom { room_code, player_name } => {
+            ClientMessage::JoinRoom {
+                room_code,
+                player_name,
+            } => {
                 // Validate player name
                 let trimmed_name = player_name.trim().to_string();
                 if trimmed_name.is_empty() || trimmed_name.len() > 20 {
@@ -379,7 +390,9 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                         });
                     }
                 } else {
-                    let err = ServerMessage::Error { message: "Room not found".to_string() };
+                    let err = ServerMessage::Error {
+                        message: "Room not found".to_string(),
+                    };
                     let _ = tx.send(serde_json::to_string(&err).unwrap());
                 }
             }
@@ -421,7 +434,9 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                         if room.all_players_ready() {
                             let countdown_msg = ServerMessage::AutoStartCountdown { seconds: 5 };
                             room.send_to_host(&serde_json::to_string(&countdown_msg).unwrap());
-                            room.broadcast_to_players(&serde_json::to_string(&countdown_msg).unwrap());
+                            room.broadcast_to_players(
+                                &serde_json::to_string(&countdown_msg).unwrap(),
+                            );
                         } else if !ready {
                             // Player un-readied — cancel any active countdown
                             let cancel_msg = ServerMessage::AutoStartCancelled;
@@ -431,7 +446,10 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                     }
                 }
             }
-            ClientMessage::NightAction { target_id, secondary_target_id } => {
+            ClientMessage::NightAction {
+                target_id,
+                secondary_target_id,
+            } => {
                 if let (Some(pid), Some(code)) = (&player_id, &player_room_code) {
                     if let Some(room_arc) = state.get_room(code).await {
                         let mut room = room_arc.lock().await;
@@ -439,7 +457,9 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                         // Validate phase
                         if !room.phase_allows_action("night_action") {
                             let err = ServerMessage::Error {
-                                message: "Night actions can only be performed during the night phase".to_string(),
+                                message:
+                                    "Night actions can only be performed during the night phase"
+                                        .to_string(),
                             };
                             let _ = tx.send(serde_json::to_string(&err).unwrap());
                             continue;
@@ -483,7 +503,15 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                                         "target_id": target_id,
                                     });
                                     tokio::spawn(async move {
-                                        db::save_game_event(&pool, &game_id, round, phase, "night_action", &data).await;
+                                        db::save_game_event(
+                                            &pool,
+                                            &game_id,
+                                            round,
+                                            phase,
+                                            "night_action",
+                                            &data,
+                                        )
+                                        .await;
                                     });
                                 }
                             }
@@ -499,7 +527,8 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                         // Validate phase
                         if !room.phase_allows_action("vote") {
                             let err = ServerMessage::Error {
-                                message: "Voting can only be done during the voting phase".to_string(),
+                                message: "Voting can only be done during the voting phase"
+                                    .to_string(),
                             };
                             let _ = tx.send(serde_json::to_string(&err).unwrap());
                             continue;
@@ -539,22 +568,28 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                                 "target_id": target_id,
                             });
                             tokio::spawn(async move {
-                                db::save_game_event(&pool, &game_id, round, phase, "vote", &data).await;
+                                db::save_game_event(&pool, &game_id, round, phase, "vote", &data)
+                                    .await;
                             });
                         }
 
                         // Broadcast vote update
                         let vote_msg = ServerMessage::VoteUpdate {
-                            votes: room.votes.iter().map(|(voter_id, target)| {
-                                let voter_name = room.get_player(voter_id)
-                                    .map(|p| p.name.clone())
-                                    .unwrap_or_default();
-                                crate::ws::messages::VoteInfo {
-                                    voter_id: voter_id.clone(),
-                                    voter_name,
-                                    target_id: target.clone(),
-                                }
-                            }).collect(),
+                            votes: room
+                                .votes
+                                .iter()
+                                .map(|(voter_id, target)| {
+                                    let voter_name = room
+                                        .get_player(voter_id)
+                                        .map(|p| p.name.clone())
+                                        .unwrap_or_default();
+                                    crate::ws::messages::VoteInfo {
+                                        voter_id: voter_id.clone(),
+                                        voter_name,
+                                        target_id: target.clone(),
+                                    }
+                                })
+                                .collect(),
                             timer_remaining: 0,
                         };
                         let json = serde_json::to_string(&vote_msg).unwrap();
@@ -578,7 +613,8 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                         // Validate phase
                         if !room.phase_allows_action("chat") {
                             let err = ServerMessage::Error {
-                                message: "Chat is only available during the night phase".to_string(),
+                                message: "Chat is only available during the night phase"
+                                    .to_string(),
                             };
                             let _ = tx.send(serde_json::to_string(&err).unwrap());
                             continue;
@@ -601,7 +637,9 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                                     // Send to all mafia + spy
                                     for p in &room.players {
                                         if let Some(r) = p.role {
-                                            if r.faction() == Faction::Mafia || r == crate::game::roles::Role::Spy {
+                                            if r.faction() == Faction::Mafia
+                                                || r == crate::game::roles::Role::Spy
+                                            {
                                                 room.send_to_player(&p.id, &json);
                                             }
                                         }
@@ -612,7 +650,10 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                     }
                 }
             }
-            ClientMessage::Reconnect { player_id: pid, room_code: code } => {
+            ClientMessage::Reconnect {
+                player_id: pid,
+                room_code: code,
+            } => {
                 info!(room_code = %code, player_id = %pid, "Player reconnecting");
                 if let Some(room_arc) = state.get_room(&code).await {
                     let mut room = room_arc.lock().await;
@@ -620,7 +661,9 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                     let player_exists = room.get_player(&pid).is_some();
                     if !player_exists {
                         warn!(room_code = %code, player_id = %pid, "Reconnect failed: player not found");
-                        let err = ServerMessage::Error { message: "Player not found in room".to_string() };
+                        let err = ServerMessage::Error {
+                            message: "Player not found in room".to_string(),
+                        };
                         let _ = tx.send(serde_json::to_string(&err).unwrap());
                         continue;
                     }
@@ -648,16 +691,22 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
 
                     // Include vote tally if in voting phase
                     let votes = if snapshot.phase == GamePhase::Voting {
-                        Some(room.votes.iter().map(|(voter_id, target)| {
-                            let voter_name = room.get_player(voter_id)
-                                .map(|p| p.name.clone())
-                                .unwrap_or_default();
-                            crate::ws::messages::VoteInfo {
-                                voter_id: voter_id.clone(),
-                                voter_name,
-                                target_id: target.clone(),
-                            }
-                        }).collect())
+                        Some(
+                            room.votes
+                                .iter()
+                                .map(|(voter_id, target)| {
+                                    let voter_name = room
+                                        .get_player(voter_id)
+                                        .map(|p| p.name.clone())
+                                        .unwrap_or_default();
+                                    crate::ws::messages::VoteInfo {
+                                        voter_id: voter_id.clone(),
+                                        voter_name,
+                                        target_id: target.clone(),
+                                    }
+                                })
+                                .collect(),
+                        )
                     } else {
                         None
                     };
@@ -677,9 +726,7 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                     let _ = tx.send(serde_json::to_string(&reconnect_msg).unwrap());
 
                     // If night phase and player is being waited for, re-send wake + prompt
-                    if snapshot.phase == GamePhase::Night
-                        && player_alive
-                    {
+                    if snapshot.phase == GamePhase::Night && player_alive {
                         if room.narration_ack_pending.contains(&pid) {
                             // Player is currently expected to act — re-send WakeUp + prompt
                             if let Some(r) = role {
@@ -689,7 +736,8 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                                 };
                                 let _ = tx.send(serde_json::to_string(&wake_msg).unwrap());
 
-                                let alive_targets: Vec<PlayerInfo> = room.alive_players()
+                                let alive_targets: Vec<PlayerInfo> = room
+                                    .alive_players()
                                     .iter()
                                     .filter(|p| p.id != pid)
                                     .map(|p| p.to_info())
@@ -717,7 +765,9 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                     };
                     room.send_to_host(&serde_json::to_string(&list_msg).unwrap());
                 } else {
-                    let err = ServerMessage::Error { message: "Room not found".to_string() };
+                    let err = ServerMessage::Error {
+                        message: "Room not found".to_string(),
+                    };
                     let _ = tx.send(serde_json::to_string(&err).unwrap());
                 }
             }
@@ -767,10 +817,7 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
 /// Legacy fallback — sends night prompts to all players at once (bypasses narration).
 #[allow(dead_code)]
 fn send_night_prompts(room: &Room) {
-    let alive_targets: Vec<PlayerInfo> = room.alive_players()
-        .iter()
-        .map(|p| p.to_info())
-        .collect();
+    let alive_targets: Vec<PlayerInfo> = room.alive_players().iter().map(|p| p.to_info()).collect();
 
     for player in room.alive_players() {
         if let Some(role) = player.role {
@@ -790,7 +837,8 @@ fn send_night_prompts(room: &Room) {
 
 /// Build the night narration script and begin executing it.
 fn start_night_narration(room: &mut Room, pool: Option<SqlitePool>) {
-    let alive_players: Vec<(String, Role)> = room.alive_players()
+    let alive_players: Vec<(String, Role)> = room
+        .alive_players()
         .iter()
         .filter_map(|p| p.role.map(|r| (p.id.clone(), r)))
         .collect();
@@ -866,10 +914,8 @@ fn execute_narration_step(room: &mut Room, step: &crate::game::narrator::Narrati
             }
         } else if step.wait_for == WaitFor::PlayerAction {
             // Send night action prompts and wait for acks
-            let alive_targets: Vec<PlayerInfo> = room.alive_players()
-                .iter()
-                .map(|p| p.to_info())
-                .collect();
+            let alive_targets: Vec<PlayerInfo> =
+                room.alive_players().iter().map(|p| p.to_info()).collect();
             for pid in &target_player_ids {
                 let prompt = ServerMessage::NightActionPrompt {
                     available_targets: alive_targets
@@ -905,7 +951,8 @@ fn spawn_persist_phase(pool: &Option<SqlitePool>, room: &Room) {
 
 /// Resolve all night actions, apply results, and transition to Dawn.
 fn resolve_night_and_advance_to_dawn(room: &mut Room, pool: Option<SqlitePool>) {
-    let alive_map: HashMap<String, Role> = room.alive_players()
+    let alive_map: HashMap<String, Role> = room
+        .alive_players()
         .iter()
         .filter_map(|p| p.role.map(|r| (p.id.clone(), r)))
         .collect();
@@ -914,7 +961,8 @@ fn resolve_night_and_advance_to_dawn(room: &mut Room, pool: Option<SqlitePool>) 
 
     // Send investigation results before applying deaths
     for (target_id, appears_guilty) in &result.investigated {
-        let target_name = room.get_player(target_id)
+        let target_name = room
+            .get_player(target_id)
             .map(|p| p.name.clone())
             .unwrap_or_default();
         for action in &room.night_actions {
@@ -925,10 +973,7 @@ fn resolve_night_and_advance_to_dawn(room: &mut Room, pool: Option<SqlitePool>) 
                     target_name: target_name.clone(),
                     appears_guilty: *appears_guilty,
                 };
-                room.send_to_player(
-                    &action.actor_id,
-                    &serde_json::to_string(&inv_msg).unwrap(),
-                );
+                room.send_to_player(&action.actor_id, &serde_json::to_string(&inv_msg).unwrap());
             }
         }
     }

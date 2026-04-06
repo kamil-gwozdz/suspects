@@ -1,7 +1,7 @@
-pub mod state;
+pub mod minigames;
+pub mod narrator;
+pub mod phases;
 pub mod roles;
 pub mod scaling;
-pub mod phases;
-pub mod minigames;
+pub mod state;
 pub mod win;
-pub mod narrator;

@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::roles::Role;
+use serde::{Deserialize, Serialize};
 
 /// What the narrator waits for before proceeding to the next step.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -130,9 +130,9 @@ pub fn build_night_script(alive_players: &[(String, Role)]) -> Vec<NarrationStep
 
     // Determine which wake-order slots have alive players
     for &wake_role in WAKE_ORDER {
-        let has_role = alive_players.iter().any(|(_, r)| {
-            canonical_wake_role(*r) == Some(wake_role)
-        });
+        let has_role = alive_players
+            .iter()
+            .any(|(_, r)| canonical_wake_role(*r) == Some(wake_role));
         if !has_role {
             continue;
         }
@@ -270,9 +270,7 @@ mod tests {
 
     #[test]
     fn test_night_script_opening_step() {
-        let players = vec![
-            ("p1".into(), Role::Civilian),
-        ];
+        let players = vec![("p1".into(), Role::Civilian)];
         let script = build_night_script(&players);
         assert_eq!(script[0].key, "night.everyone_close_eyes");
         assert_eq!(script[0].wait_for, WaitFor::Duration(3));
@@ -293,10 +291,7 @@ mod tests {
 
     #[test]
     fn test_night_script_single_role() {
-        let players = vec![
-            ("p1".into(), Role::Doctor),
-            ("p2".into(), Role::Civilian),
-        ];
+        let players = vec![("p1".into(), Role::Doctor), ("p2".into(), Role::Civilian)];
         let script = build_night_script(&players);
         // 1 opening + 3 steps for Doctor (wake, instruction, sleep)
         assert_eq!(script.len(), 4);
@@ -318,28 +313,30 @@ mod tests {
         let script = build_night_script(&players);
 
         // Extract wake keys in order
-        let wake_keys: Vec<&str> = script.iter()
+        let wake_keys: Vec<&str> = script
+            .iter()
             .filter(|s| s.key.ends_with("_wakes"))
             .map(|s| s.key.as_str())
             .collect();
 
-        assert_eq!(wake_keys, vec![
-            "night.escort_wakes",
-            "night.mafia_wakes",
-            "night.detective_wakes",
-            "night.witch_wakes",
-        ]);
+        assert_eq!(
+            wake_keys,
+            vec![
+                "night.escort_wakes",
+                "night.mafia_wakes",
+                "night.detective_wakes",
+                "night.witch_wakes",
+            ]
+        );
     }
 
     #[test]
     fn test_night_script_godfather_uses_mafia_slot() {
-        let players = vec![
-            ("p1".into(), Role::Godfather),
-            ("p2".into(), Role::Doctor),
-        ];
+        let players = vec![("p1".into(), Role::Godfather), ("p2".into(), Role::Doctor)];
         let script = build_night_script(&players);
 
-        let wake_keys: Vec<&str> = script.iter()
+        let wake_keys: Vec<&str> = script
+            .iter()
             .filter(|s| s.key.ends_with("_wakes"))
             .map(|s| s.key.as_str())
             .collect();
@@ -358,7 +355,8 @@ mod tests {
         ];
         let script = build_night_script(&players);
 
-        let mafia_wakes: Vec<_> = script.iter()
+        let mafia_wakes: Vec<_> = script
+            .iter()
             .filter(|s| s.key == "night.mafia_wakes")
             .collect();
 
@@ -367,17 +365,24 @@ mod tests {
 
     #[test]
     fn test_night_script_step_structure() {
-        let players = vec![
-            ("p1".into(), Role::SerialKiller),
-        ];
+        let players = vec![("p1".into(), Role::SerialKiller)];
         let script = build_night_script(&players);
         // opening + wake + instruction + sleep = 4
         assert_eq!(script.len(), 4);
 
         // Check audio file paths
-        assert_eq!(script[1].audio_file, "/audio/gm/night/serial_killer_wakes.mp3");
-        assert_eq!(script[2].audio_file, "/audio/gm/night/serial_killer_instruction.mp3");
-        assert_eq!(script[3].audio_file, "/audio/gm/night/serial_killer_sleeps.mp3");
+        assert_eq!(
+            script[1].audio_file,
+            "/audio/gm/night/serial_killer_wakes.mp3"
+        );
+        assert_eq!(
+            script[2].audio_file,
+            "/audio/gm/night/serial_killer_instruction.mp3"
+        );
+        assert_eq!(
+            script[3].audio_file,
+            "/audio/gm/night/serial_killer_sleeps.mp3"
+        );
     }
 
     #[test]
@@ -399,21 +404,25 @@ mod tests {
         // 1 opening + 8 roles * 3 steps each = 25
         assert_eq!(script.len(), 25);
 
-        let wake_keys: Vec<&str> = script.iter()
+        let wake_keys: Vec<&str> = script
+            .iter()
             .filter(|s| s.key.ends_with("_wakes"))
             .map(|s| s.key.as_str())
             .collect();
 
-        assert_eq!(wake_keys, vec![
-            "night.escort_wakes",
-            "night.consort_wakes",
-            "night.mafia_wakes",
-            "night.doctor_wakes",
-            "night.detective_wakes",
-            "night.vigilante_wakes",
-            "night.serial_killer_wakes",
-            "night.witch_wakes",
-        ]);
+        assert_eq!(
+            wake_keys,
+            vec![
+                "night.escort_wakes",
+                "night.consort_wakes",
+                "night.mafia_wakes",
+                "night.doctor_wakes",
+                "night.detective_wakes",
+                "night.vigilante_wakes",
+                "night.serial_killer_wakes",
+                "night.witch_wakes",
+            ]
+        );
     }
 
     #[test]

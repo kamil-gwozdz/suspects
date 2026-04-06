@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
-use crate::game::roles::Role;
-use crate::game::state::GamePhase;
 use crate::game::minigames::MiniGameType;
 use crate::game::narrator::WaitFor;
+use crate::game::roles::Role;
+use crate::game::state::GamePhase;
+use serde::{Deserialize, Serialize};
 
 /// Messages sent from clients (host or player) to the server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,11 +12,17 @@ pub enum ClientMessage {
     /// Host creates a new room
     CreateRoom { language: String },
     /// Player joins a room
-    JoinRoom { room_code: String, player_name: String },
+    JoinRoom {
+        room_code: String,
+        player_name: String,
+    },
     /// Host starts the game
     StartGame,
     /// Player submits night action
-    NightAction { target_id: Option<String>, secondary_target_id: Option<String> },
+    NightAction {
+        target_id: Option<String>,
+        secondary_target_id: Option<String>,
+    },
     /// Player casts a vote during day
     Vote { target_id: Option<String> },
     /// Player toggles ready state
@@ -26,9 +32,15 @@ pub enum ClientMessage {
     /// Host advances to next phase manually
     AdvancePhase,
     /// Player reconnects
-    Reconnect { player_id: String, room_code: String },
+    Reconnect {
+        player_id: String,
+        room_code: String,
+    },
     /// Player responds to a mini-game prompt
-    MiniGameAction { game_type: MiniGameType, action: serde_json::Value },
+    MiniGameAction {
+        game_type: MiniGameType,
+        action: serde_json::Value,
+    },
     /// Player signals they are done with their night action
     NarrationAck,
     /// Host signals ready for next narration step
@@ -43,31 +55,71 @@ pub enum ServerMessage {
     /// Room created successfully (sent to host)
     RoomCreated { room_code: String, room_url: String },
     /// Player joined (broadcast to host)
-    PlayerJoined { player_id: String, player_name: String, player_count: usize },
+    PlayerJoined {
+        player_id: String,
+        player_name: String,
+        player_count: usize,
+    },
     /// Player left/disconnected
-    PlayerLeft { player_id: String, player_name: String },
+    PlayerLeft {
+        player_id: String,
+        player_name: String,
+    },
     /// Player reconnected (sent to host)
-    PlayerReconnected { player_id: String, player_name: String },
+    PlayerReconnected {
+        player_id: String,
+        player_name: String,
+    },
     /// Joined room confirmation (sent to player)
-    JoinedRoom { player_id: String, room_code: String },
+    JoinedRoom {
+        player_id: String,
+        room_code: String,
+    },
     /// Phase changed
-    PhaseChanged { phase: GamePhase, round: u32, timer_secs: u32 },
+    PhaseChanged {
+        phase: GamePhase,
+        round: u32,
+        timer_secs: u32,
+    },
     /// Role assignment (sent privately to each player)
-    RoleAssigned { role: Role, description_key: String, faction: String },
+    RoleAssigned {
+        role: Role,
+        description_key: String,
+        faction: String,
+    },
     /// Night action prompt (sent to players with night actions)
     NightActionPrompt { available_targets: Vec<PlayerInfo> },
     /// Night results (sent to host for display)
-    NightResults { killed: Vec<PlayerInfo>, saved: bool, events: Vec<String> },
+    NightResults {
+        killed: Vec<PlayerInfo>,
+        saved: bool,
+        events: Vec<String>,
+    },
     /// Investigation result (sent privately to Detective)
-    InvestigationResult { target_name: String, appears_guilty: bool },
+    InvestigationResult {
+        target_name: String,
+        appears_guilty: bool,
+    },
     /// Vote update (broadcast)
-    VoteUpdate { votes: Vec<VoteInfo>, timer_remaining: u32 },
+    VoteUpdate {
+        votes: Vec<VoteInfo>,
+        timer_remaining: u32,
+    },
     /// Vote result
-    VoteResult { target: Option<PlayerInfo>, was_lynched: bool },
+    VoteResult {
+        target: Option<PlayerInfo>,
+        was_lynched: bool,
+    },
     /// Game over
-    GameOver { winner: String, player_roles: Vec<PlayerRoleReveal> },
+    GameOver {
+        winner: String,
+        player_roles: Vec<PlayerRoleReveal>,
+    },
     /// Chat message (mafia chat)
-    ChatMessage { sender_name: String, message: String },
+    ChatMessage {
+        sender_name: String,
+        message: String,
+    },
     /// Error
     Error { message: String },
     /// Player list update
@@ -87,13 +139,27 @@ pub enum ServerMessage {
         votes: Option<Vec<VoteInfo>>,
     },
     /// Mini-game started (broadcast to all)
-    MiniGameStart { game_type: MiniGameType, config: serde_json::Value, participants: Vec<String> },
+    MiniGameStart {
+        game_type: MiniGameType,
+        config: serde_json::Value,
+        participants: Vec<String>,
+    },
     /// Mini-game prompt (sent to individual players)
-    MiniGamePrompt { game_type: MiniGameType, prompt: serde_json::Value },
+    MiniGamePrompt {
+        game_type: MiniGameType,
+        prompt: serde_json::Value,
+    },
     /// Mini-game result (sent to host for display)
-    MiniGameResult { game_type: MiniGameType, result: serde_json::Value },
+    MiniGameResult {
+        game_type: MiniGameType,
+        result: serde_json::Value,
+    },
     /// Player ready state changed (broadcast to host)
-    PlayerReadyUpdate { player_id: String, player_name: String, ready: bool },
+    PlayerReadyUpdate {
+        player_id: String,
+        player_name: String,
+        ready: bool,
+    },
     /// All players ready — game auto-starting in N seconds
     AutoStartCountdown { seconds: u32 },
     /// Auto-start cancelled (a player un-readied)

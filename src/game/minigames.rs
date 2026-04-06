@@ -239,10 +239,7 @@ pub fn resolve_interrogation(
 /// Pick an interrogator. Prefers a player with the Detective role; falls back
 /// to a random alive player. `detective_id` is `Some` when a living detective
 /// exists.
-pub fn pick_interrogator(
-    detective_id: Option<&str>,
-    alive_ids: &[String],
-) -> Option<String> {
+pub fn pick_interrogator(detective_id: Option<&str>, alive_ids: &[String]) -> Option<String> {
     if let Some(det) = detective_id {
         if alive_ids.iter().any(|id| id == det) {
             return Some(det.to_string());
@@ -258,10 +255,7 @@ pub fn pick_interrogator(
 }
 
 /// Pick an interrogation target (someone other than the interrogator).
-pub fn pick_interrogation_target(
-    interrogator_id: &str,
-    alive_ids: &[String],
-) -> Option<String> {
+pub fn pick_interrogation_target(interrogator_id: &str, alive_ids: &[String]) -> Option<String> {
     let candidates: Vec<&String> = alive_ids
         .iter()
         .filter(|id| id.as_str() != interrogator_id)
@@ -287,7 +281,12 @@ mod tests {
 
     #[test]
     fn test_both_cooperate() {
-        let r = resolve_prisoners_dilemma("a", PrisonerChoice::Cooperate, "b", PrisonerChoice::Cooperate);
+        let r = resolve_prisoners_dilemma(
+            "a",
+            PrisonerChoice::Cooperate,
+            "b",
+            PrisonerChoice::Cooperate,
+        );
         assert_eq!(r.player_a.score_delta, 2);
         assert_eq!(r.player_b.score_delta, 2);
     }
@@ -301,14 +300,16 @@ mod tests {
 
     #[test]
     fn test_a_betrays_b_cooperates() {
-        let r = resolve_prisoners_dilemma("a", PrisonerChoice::Betray, "b", PrisonerChoice::Cooperate);
+        let r =
+            resolve_prisoners_dilemma("a", PrisonerChoice::Betray, "b", PrisonerChoice::Cooperate);
         assert_eq!(r.player_a.score_delta, 3);
         assert_eq!(r.player_b.score_delta, -1);
     }
 
     #[test]
     fn test_a_cooperates_b_betrays() {
-        let r = resolve_prisoners_dilemma("a", PrisonerChoice::Cooperate, "b", PrisonerChoice::Betray);
+        let r =
+            resolve_prisoners_dilemma("a", PrisonerChoice::Cooperate, "b", PrisonerChoice::Betray);
         assert_eq!(r.player_a.score_delta, -1);
         assert_eq!(r.player_b.score_delta, 3);
     }
@@ -417,9 +418,18 @@ mod tests {
     #[test]
     fn test_interrogation_result() {
         let qa = vec![
-            InterrogationQA { question: "Are you mafia?".into(), answer: false },
-            InterrogationQA { question: "Did you act last night?".into(), answer: true },
-            InterrogationQA { question: "Are you town?".into(), answer: true },
+            InterrogationQA {
+                question: "Are you mafia?".into(),
+                answer: false,
+            },
+            InterrogationQA {
+                question: "Did you act last night?".into(),
+                answer: true,
+            },
+            InterrogationQA {
+                question: "Are you town?".into(),
+                answer: true,
+            },
         ];
         let result = resolve_interrogation("det", "sus", qa);
         assert_eq!(result.interrogator_id, "det");

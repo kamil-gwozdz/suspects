@@ -1,15 +1,15 @@
+use rand::Rng;
+use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::{Mutex, RwLock};
-use sqlx::SqlitePool;
 use uuid::Uuid;
-use rand::Rng;
 
-use crate::game::state::{GamePhase, GameState};
-use crate::game::roles::Role;
 use crate::game::narrator::NarrationStep;
+use crate::game::roles::Role;
+use crate::game::state::{GamePhase, GameState};
 use crate::ws::messages::PlayerInfo;
 
 /// Maximum number of players allowed in a single room.
@@ -81,8 +81,10 @@ impl Room {
 
     /// Reconstruct a Room from persisted DB data (server restart recovery).
     pub fn from_loaded(loaded: crate::db::LoadedGame) -> Self {
-        let players: Vec<Player> = loaded.players.into_iter().map(|lp| {
-            Player {
+        let players: Vec<Player> = loaded
+            .players
+            .into_iter()
+            .map(|lp| Player {
                 id: lp.id,
                 name: lp.name,
                 role: lp.role,
@@ -91,8 +93,8 @@ impl Room {
                 connected: false,
                 disconnected_at: Some(Instant::now()),
                 tx: None,
-            }
-        }).collect();
+            })
+            .collect();
 
         Self {
             id: loaded.id,
@@ -190,8 +192,7 @@ impl Room {
 
     /// Returns `true` if the room has no connected players and no connected host.
     pub fn is_abandoned(&self) -> bool {
-        self.host_tx.is_none()
-            && self.players.iter().all(|p| !p.connected)
+        self.host_tx.is_none() && self.players.iter().all(|p| !p.connected)
     }
 
     pub fn get_player(&self, id: &str) -> Option<&Player> {
@@ -266,7 +267,9 @@ pub struct GameSnapshot {
 fn generate_room_code() -> String {
     let mut rng = rand::rng();
     let chars: Vec<char> = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".chars().collect();
-    (0..4).map(|_| chars[rng.random_range(0..chars.len())]).collect()
+    (0..4)
+        .map(|_| chars[rng.random_range(0..chars.len())])
+        .collect()
 }
 
 #[derive(Clone)]
@@ -317,10 +320,10 @@ impl AppState {
                 let host_gone_long_enough = room
                     .host_disconnected_at
                     .map_or(false, |t| t.elapsed() >= min_age);
-                let all_players_gone_long_enough = room.players.iter().all(|p| {
-                    p.disconnected_at
-                        .map_or(true, |t| t.elapsed() >= min_age)
-                });
+                let all_players_gone_long_enough = room
+                    .players
+                    .iter()
+                    .all(|p| p.disconnected_at.map_or(true, |t| t.elapsed() >= min_age));
                 if host_gone_long_enough && all_players_gone_long_enough {
                     to_remove.push(code.clone());
                 }

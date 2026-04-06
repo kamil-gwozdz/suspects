@@ -42,16 +42,27 @@ pub enum Role {
 impl Role {
     pub fn faction(&self) -> Faction {
         match self {
-            Role::Civilian | Role::Doctor | Role::Detective | Role::Escort
-            | Role::Vigilante | Role::Mayor | Role::Spy => Faction::Town,
+            Role::Civilian
+            | Role::Doctor
+            | Role::Detective
+            | Role::Escort
+            | Role::Vigilante
+            | Role::Mayor
+            | Role::Spy => Faction::Town,
             Role::Mafioso | Role::Godfather | Role::Consort | Role::Janitor => Faction::Mafia,
-            Role::Jester | Role::SerialKiller | Role::Survivor
-            | Role::Executioner | Role::Witch => Faction::Neutral,
+            Role::Jester
+            | Role::SerialKiller
+            | Role::Survivor
+            | Role::Executioner
+            | Role::Witch => Faction::Neutral,
         }
     }
 
     pub fn has_night_action(&self) -> bool {
-        !matches!(self, Role::Civilian | Role::Mayor | Role::Jester | Role::Survivor)
+        !matches!(
+            self,
+            Role::Civilian | Role::Mayor | Role::Jester | Role::Survivor
+        )
     }
 
     pub fn is_immune_to_mafia(&self) -> bool {

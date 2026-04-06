@@ -31,13 +31,17 @@ impl RoomSnapshot {
             code: room.code.clone(),
             language: room.language.clone(),
             game_state: room.game_state.clone(),
-            players: room.players.iter().map(|p| PlayerSnapshot {
-                id: p.id.clone(),
-                name: p.name.clone(),
-                role: p.role,
-                alive: p.alive,
-                connected: p.connected,
-            }).collect(),
+            players: room
+                .players
+                .iter()
+                .map(|p| PlayerSnapshot {
+                    id: p.id.clone(),
+                    name: p.name.clone(),
+                    role: p.role,
+                    alive: p.alive,
+                    connected: p.connected,
+                })
+                .collect(),
         }
     }
 }
@@ -45,13 +49,12 @@ impl RoomSnapshot {
 pub async fn run_migrations(pool: &SqlitePool) {
     // Drop legacy tables if they have the old schema (state/config columns).
     // These tables were never written to, so no data is lost.
-    let has_old_schema = sqlx::query(
-        "SELECT COUNT(*) as cnt FROM pragma_table_info('games') WHERE name = 'state'"
-    )
-    .fetch_one(pool)
-    .await
-    .map(|row: SqliteRow| row.get::<i32, _>("cnt") > 0)
-    .unwrap_or(false);
+    let has_old_schema =
+        sqlx::query("SELECT COUNT(*) as cnt FROM pragma_table_info('games') WHERE name = 'state'")
+            .fetch_one(pool)
+            .await
+            .map(|row: SqliteRow| row.get::<i32, _>("cnt") > 0)
+            .unwrap_or(false);
 
     if has_old_schema {
         tracing::info!("Detected legacy schema, recreating tables");
@@ -74,7 +77,7 @@ pub async fn run_migrations(pool: &SqlitePool) {
             voting_timer_secs INTEGER NOT NULL DEFAULT 60,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )"
+        )",
     )
     .execute(pool)
     .await
@@ -89,7 +92,7 @@ pub async fn run_migrations(pool: &SqlitePool) {
             is_alive INTEGER NOT NULL DEFAULT 1,
             connected INTEGER NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )"
+        )",
     )
     .execute(pool)
     .await
@@ -104,7 +107,7 @@ pub async fn run_migrations(pool: &SqlitePool) {
             event_type TEXT NOT NULL,
             data TEXT NOT NULL DEFAULT '{}',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )"
+        )",
     )
     .execute(pool)
     .await
@@ -159,7 +162,7 @@ pub async fn save_player(pool: &SqlitePool, game_id: &str, player: &PlayerSnapsh
          ON CONFLICT(id) DO UPDATE SET
              role = excluded.role,
              is_alive = excluded.is_alive,
-             connected = excluded.connected"
+             connected = excluded.connected",
     )
     .bind(&player.id)
     .bind(game_id)
@@ -191,7 +194,7 @@ pub async fn save_phase_transition(pool: &SqlitePool, room: &RoomSnapshot) {
 
     let res = sqlx::query(
         "INSERT INTO game_events (game_id, round, phase, event_type, data)
-         VALUES (?1, ?2, ?3, 'phase_transition', '{}')"
+         VALUES (?1, ?2, ?3, 'phase_transition', '{}')",
     )
     .bind(&room.id)
     .bind(room.game_state.round as i64)
@@ -219,7 +222,7 @@ pub async fn save_game_event(
 
     let res = sqlx::query(
         "INSERT INTO game_events (game_id, round, phase, event_type, data)
-         VALUES (?1, ?2, ?3, ?4, ?5)"
+         VALUES (?1, ?2, ?3, ?4, ?5)",
     )
     .bind(game_id)
     .bind(round as i64)
@@ -237,7 +240,7 @@ pub async fn save_game_event(
 /// Mark a game as completed (game_over phase).
 pub async fn mark_game_completed(pool: &SqlitePool, game_id: &str) {
     let res = sqlx::query(
-        "UPDATE games SET phase = 'game_over', updated_at = CURRENT_TIMESTAMP WHERE id = ?1"
+        "UPDATE games SET phase = 'game_over', updated_at = CURRENT_TIMESTAMP WHERE id = ?1",
     )
     .bind(game_id)
     .execute(pool)
@@ -292,7 +295,7 @@ pub async fn load_active_games(pool: &SqlitePool) -> Vec<LoadedGame> {
                 day_timer_secs, night_timer_secs, voting_timer_secs
          FROM games
          WHERE phase NOT IN ('lobby', 'game_over')
-         ORDER BY created_at DESC"
+         ORDER BY created_at DESC",
     )
     .fetch_all(pool)
     .await
@@ -317,7 +320,7 @@ pub async fn load_active_games(pool: &SqlitePool) -> Vec<LoadedGame> {
         let voting_timer: i64 = row.get("voting_timer_secs");
 
         let player_rows: Vec<SqliteRow> = match sqlx::query(
-            "SELECT id, name, role, is_alive FROM players WHERE game_id = ?1"
+            "SELECT id, name, role, is_alive FROM players WHERE game_id = ?1",
         )
         .bind(&game_id)
         .fetch_all(pool)
