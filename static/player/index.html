@@ -13,7 +13,7 @@
         <div id="join-screen" class="screen active">
             <h1 class="logo-small">SUSPECTS</h1>
             <div class="join-form">
-                <input type="text" id="player-name" placeholder="Your name" maxlength="20" autocomplete="off">
+                <input type="text" id="player-name" placeholder="Your name" maxlength="20" autocomplete="off" data-i18n-placeholder="placeholder_name">
                 <button id="join-btn" class="btn-primary" data-i18n="join">Join Game</button>
             </div>
             <p id="join-error" class="error-text hidden"></p>
@@ -21,9 +21,11 @@
 
         <!-- Waiting Screen -->
         <div id="waiting-screen" class="screen">
-            <h2 data-i18n="waiting">Waiting for game to start...</h2>
-            <div class="pulse-dot"></div>
             <p id="waiting-name" class="player-name-display"></p>
+            <p class="waiting-subtitle" data-i18n="waiting_for_players">Waiting for other players...</p>
+            <button id="ready-btn" class="ready-btn" data-i18n="not_ready">Not Ready</button>
+            <p class="tap-hint" data-i18n="tap_when_ready">Tap when you're ready</p>
+            <div id="countdown-display" class="countdown-display hidden"></div>
         </div>
 
         <!-- Role Reveal Screen -->
@@ -55,7 +57,7 @@
                 <span class="zzz">💤</span>
                 <span class="zzz">💤</span>
             </div>
-            <p class="sleeping-text">Close your eyes...</p>
+            <p class="sleeping-text" data-i18n="close_eyes">Close your eyes...</p>
         </div>
 
         <!-- Day Screen (waiting) -->
@@ -77,7 +79,7 @@
         <div id="chat-overlay" class="hidden">
             <div class="chat-messages" id="chat-messages"></div>
             <div class="chat-input">
-                <input type="text" id="chat-input" placeholder="Message..." autocomplete="off">
+                <input type="text" id="chat-input" placeholder="Message..." autocomplete="off" data-i18n-placeholder="placeholder_message">
                 <button id="chat-send-btn">→</button>
             </div>
         </div>
@@ -99,7 +101,7 @@
         <div id="reconnect-overlay" class="hidden">
             <div class="reconnect-content">
                 <div class="reconnect-spinner"></div>
-                <p>Reconnecting...</p>
+                <p data-i18n="reconnecting">Reconnecting...</p>
             </div>
         </div>
     </div>

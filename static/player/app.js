@@ -1,5 +1,6 @@
 const params = new URLSearchParams(window.location.search);
 const roomCode = params.get('room');
+const lang = params.get('lang') || 'en';
 const ws = new WsClient('/ws/player');
 
 let playerId = null;
@@ -7,6 +8,40 @@ let playerRole = null;
 let playerFaction = null;
 let selectedTarget = null;
 let timerInterval = null;
+let i18nStrings = {};
+let isReady = false;
+let countdownInterval = null;
+
+// Load i18n translations, then initialize the app
+fetch(`/i18n/${lang}.json`)
+    .then(r => r.ok ? r.json() : {})
+    .catch(() => ({}))
+    .then(strings => {
+        i18nStrings = strings;
+        applyI18n();
+        initApp();
+    });
+
+function t(key, params = {}) {
+    let str = i18nStrings[key] || key;
+    for (const [k, v] of Object.entries(params)) {
+        str = str.replace(`{${k}}`, v);
+    }
+    return str;
+}
+
+function applyI18n() {
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (i18nStrings[key]) el.textContent = i18nStrings[key];
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        if (i18nStrings[key]) el.placeholder = i18nStrings[key];
+    });
+}
+
+function initApp() {
 
 // Restore saved session from localStorage
 const savedName = localStorage.getItem('suspects_player_name');
@@ -27,6 +62,8 @@ const reconnectOverlay = document.getElementById('reconnect-overlay');
 
 const joinBtn = document.getElementById('join-btn');
 const nameInput = document.getElementById('player-name');
+const readyBtn = document.getElementById('ready-btn');
+const countdownDisplay = document.getElementById('countdown-display');
 const confirmActionBtn = document.getElementById('confirm-action-btn');
 const skipActionBtn = document.getElementById('skip-action-btn');
 const castVoteBtn = document.getElementById('cast-vote-btn');
@@ -57,7 +94,7 @@ ws.onStateChange((state) => {
 joinBtn.addEventListener('click', () => {
     const name = nameInput.value.trim();
     if (!name) return;
-    const code = roomCode || prompt('Enter room code:');
+    const code = roomCode || prompt(t('enter_room_code'));
     if (!code) return;
 
     localStorage.setItem('suspects_player_name', name);
@@ -69,12 +106,19 @@ nameInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') joinBtn.click();
 });
 
+readyBtn.addEventListener('click', () => {
+    isReady = !isReady;
+    readyBtn.textContent = isReady ? `${t('ready')} ✓` : t('not_ready');
+    readyBtn.classList.toggle('ready', isReady);
+    ws.send({ type: 'player_ready', payload: { ready: isReady } });
+});
+
 confirmActionBtn.addEventListener('click', () => {
     if (selectedTarget) {
         ws.send({ type: 'night_action', payload: { target_id: selectedTarget, secondary_target_id: null } });
         ws.send({ type: 'narration_ack' });
         confirmActionBtn.disabled = true;
-        confirmActionBtn.innerHTML = '<span class="btn-spinner"></span> Confirming…';
+        confirmActionBtn.innerHTML = `<span class="btn-spinner"></span> ${t('confirming')}`;
         skipActionBtn.disabled = true;
         selectedTarget = null;
     }
@@ -84,21 +128,21 @@ skipActionBtn.addEventListener('click', () => {
     ws.send({ type: 'night_action', payload: { target_id: null, secondary_target_id: null } });
     ws.send({ type: 'narration_ack' });
     skipActionBtn.disabled = true;
-    skipActionBtn.innerHTML = '<span class="btn-spinner"></span> Skipping…';
+    skipActionBtn.innerHTML = `<span class="btn-spinner"></span> ${t('skipping')}`;
     confirmActionBtn.disabled = true;
 });
 
 castVoteBtn.addEventListener('click', () => {
     ws.send({ type: 'vote', payload: { target_id: selectedTarget } });
     castVoteBtn.disabled = true;
-    castVoteBtn.innerHTML = '<span class="btn-spinner"></span> Voting…';
+    castVoteBtn.innerHTML = `<span class="btn-spinner"></span> ${t('voting_in_progress')}`;
     skipVoteBtn.disabled = true;
 });
 
 skipVoteBtn.addEventListener('click', () => {
     ws.send({ type: 'vote', payload: { target_id: null } });
     skipVoteBtn.disabled = true;
-    skipVoteBtn.innerHTML = '<span class="btn-spinner"></span> Abstaining…';
+    skipVoteBtn.innerHTML = `<span class="btn-spinner"></span> ${t('abstaining')}`;
     castVoteBtn.disabled = true;
 });
 
@@ -145,6 +189,12 @@ ws.onMessage((msg) => {
         case 'chat_message':
             handleChatMessage(msg.payload);
             break;
+        case 'auto_start_countdown':
+            handleAutoStartCountdown(msg.payload);
+            break;
+        case 'auto_start_cancelled':
+            handleAutoStartCancelled();
+            break;
         case 'game_over':
             handleGameOver(msg.payload);
             break;
@@ -167,7 +217,37 @@ function handleJoined({ player_id, room_code }) {
     localStorage.setItem('suspects_player_id', player_id);
     localStorage.setItem('suspects_room_code', room_code);
     document.getElementById('waiting-name').textContent = nameInput.value.trim();
+    // Reset ready state on fresh join
+    isReady = false;
+    readyBtn.textContent = t('not_ready');
+    readyBtn.classList.remove('ready');
+    countdownDisplay.classList.add('hidden');
     showScreen(waitingScreen);
+}
+
+function handleAutoStartCountdown({ seconds }) {
+    if (countdownInterval) clearInterval(countdownInterval);
+    let remaining = seconds;
+    countdownDisplay.textContent = t('game_starting_in', { seconds: remaining });
+    countdownDisplay.classList.remove('hidden');
+    countdownInterval = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+            countdownDisplay.textContent = t('game_starting_in', { seconds: 0 });
+        } else {
+            countdownDisplay.textContent = t('game_starting_in', { seconds: remaining });
+        }
+    }, 1000);
+}
+
+function handleAutoStartCancelled() {
+    if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+    }
+    countdownDisplay.classList.add('hidden');
 }
 
 function handleReconnectState({ player_id, room_code, phase, round, alive_players, role, description_key, faction, votes }) {
@@ -235,11 +315,11 @@ function handleRoleAssigned({ role, description_key, faction }) {
     };
 
     document.getElementById('role-icon').textContent = roleIcons[role] || '❓';
-    document.getElementById('role-name').textContent = formatRole(role);
-    document.getElementById('role-description').textContent = getRoleDescription(role);
+    document.getElementById('role-name').textContent = t(`role_name_${role}`) || formatRole(role);
+    document.getElementById('role-description').textContent = t(`role_${role}`);
     
     const factionEl = document.getElementById('role-faction');
-    factionEl.textContent = faction;
+    factionEl.textContent = t(`faction_${playerFaction}`) || faction;
     factionEl.className = `role-faction ${playerFaction}`;
 
     showScreen(roleScreen);
@@ -250,9 +330,9 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
         case 'night':
             // Reset action buttons for new night
             confirmActionBtn.disabled = true;
-            confirmActionBtn.textContent = 'Confirm';
+            confirmActionBtn.textContent = t('confirm');
             skipActionBtn.disabled = false;
-            skipActionBtn.textContent = 'Skip';
+            skipActionBtn.textContent = t('skip');
             // Show mafia chat if mafia
             if (playerFaction === 'mafia') {
                 document.getElementById('chat-overlay').classList.remove('hidden');
@@ -269,9 +349,9 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
         case 'voting':
             // Reset vote buttons for new voting phase
             castVoteBtn.disabled = true;
-            castVoteBtn.textContent = 'Cast Vote';
+            castVoteBtn.textContent = t('vote_btn');
             skipVoteBtn.disabled = false;
-            skipVoteBtn.textContent = 'Abstain';
+            skipVoteBtn.textContent = t('abstain');
             selectedTarget = null;
             break;
         case 'execution':
@@ -307,13 +387,15 @@ function handleNightPrompt({ available_targets }) {
 }
 
 function handleWakeUp({ role, instruction }) {
-    // Update instruction text
-    document.getElementById('night-instruction').textContent = instruction;
+    // Use localized instruction based on player's role, fall back to server text
+    const localInstruction = t(`night_instruction_${playerRole}`);
+    document.getElementById('night-instruction').textContent =
+        localInstruction !== `night_instruction_${playerRole}` ? localInstruction : instruction;
     // Reset action buttons
     confirmActionBtn.disabled = true;
-    confirmActionBtn.textContent = 'Confirm';
+    confirmActionBtn.textContent = t('confirm');
     skipActionBtn.disabled = false;
-    skipActionBtn.textContent = 'Skip';
+    skipActionBtn.textContent = t('skip');
     selectedTarget = null;
     // Play wake-up animation then show the night action screen
     nightScreen.classList.add('waking-up');
@@ -327,8 +409,10 @@ function handleGoToSleep() {
 }
 
 function handleInvestigation({ target_name, appears_guilty }) {
-    const result = appears_guilty ? '🔴 Suspicious' : '🟢 Innocent';
-    alert(`Investigation: ${target_name} appears ${result}`);
+    const result = appears_guilty
+        ? `🔴 ${t('investigation_suspicious')}`
+        : `🟢 ${t('investigation_innocent')}`;
+    alert(t('investigation_result', { name: target_name, result }));
 }
 
 function handleChatMessage({ sender_name, message }) {
@@ -340,11 +424,13 @@ function handleChatMessage({ sender_name, message }) {
 }
 
 function handleGameOver({ winner, player_roles }) {
-    document.getElementById('gameover-player-message').textContent = `${winner} wins!`;
+    document.getElementById('gameover-player-message').textContent = t('game_over_winner', { winner });
     const myResult = player_roles.find(p => p.player_id === playerId);
     if (myResult) {
+        const roleName = t(`role_name_${myResult.role}`) || formatRole(myResult.role);
+        const resultText = myResult.alive ? t('survived') : t('eliminated_result');
         document.getElementById('gameover-player-result').textContent =
-            `You were ${formatRole(myResult.role)} — ${myResult.alive ? 'Survived!' : 'Eliminated'}`;
+            t('game_over_role', { role: roleName, result: resultText });
     }
     // Clear stored session — game is over
     localStorage.removeItem('suspects_player_id');
@@ -368,13 +454,13 @@ function handleError({ message }) {
 
     // Re-enable action buttons on error so player can retry
     confirmActionBtn.disabled = false;
-    confirmActionBtn.textContent = 'Confirm';
+    confirmActionBtn.textContent = t('confirm');
     skipActionBtn.disabled = false;
-    skipActionBtn.textContent = 'Skip';
+    skipActionBtn.textContent = t('skip');
     castVoteBtn.disabled = false;
-    castVoteBtn.textContent = 'Cast Vote';
+    castVoteBtn.textContent = t('vote_btn');
     skipVoteBtn.disabled = false;
-    skipVoteBtn.textContent = 'Abstain';
+    skipVoteBtn.textContent = t('abstain');
 }
 
 function showErrorToast(message) {
@@ -427,28 +513,6 @@ function formatRole(role) {
     return role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function getRoleDescription(role) {
-    const descriptions = {
-        civilian: 'You are an ordinary town member. Use your vote wisely.',
-        doctor: 'Each night, choose a player to heal. They will survive if attacked.',
-        detective: 'Each night, investigate a player to learn if they are suspicious.',
-        escort: 'Each night, block a player\'s night action.',
-        vigilante: 'You can shoot a player at night. Use your power carefully.',
-        mayor: 'Reveal yourself to gain 3 votes, but you can no longer be healed.',
-        spy: 'You can see the mafia\'s night chat.',
-        mafioso: 'Each night, vote with your team to eliminate a player.',
-        godfather: 'Lead the mafia. You appear innocent to investigations.',
-        consort: 'Block a player\'s night action on behalf of the mafia.',
-        janitor: 'Clean the crime scene — the victim\'s role stays hidden.',
-        jester: 'Win by getting the town to vote you out during the day.',
-        serial_killer: 'Kill a player each night. You are immune to the mafia.',
-        survivor: 'Stay alive until the end to win. You have limited vests.',
-        executioner: 'Get your target lynched by the town to win.',
-        witch: 'Redirect a player\'s action to a different target.',
-    };
-    return descriptions[role] || '';
-}
-
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -479,7 +543,7 @@ function handleMiniGamePrompt({ game_type, prompt }) {
             renderInterrogationPrompt(screen, prompt);
             break;
         default:
-            screen.innerHTML = `<p>Unknown mini-game: ${game_type}</p>`;
+            screen.innerHTML = `<p>${t('mg_unknown')}: ${game_type}</p>`;
     }
 
     showScreen(screen);
@@ -499,16 +563,15 @@ function getOrCreateMiniGameScreen() {
 // --- Prisoner's Dilemma ---
 
 function renderPrisonerPrompt(screen, prompt) {
-    const opponentName = prompt.opponent_name || 'another player';
+    const opponentName = prompt.opponent_name || t('mg_another_player');
 
     screen.innerHTML = `
-        <h2 class="mg-player-title">\u{1F91D} Prisoner's Dilemma</h2>
-        <p class="mg-player-desc">You face <strong>${escapeHtml(opponentName)}</strong>.<br>
-        Both cooperate: +2 each. Both betray: -1 each.<br>
-        One betrays: betrayer +3, cooperator -1.</p>
+        <h2 class="mg-player-title">\u{1F91D} ${t('mg_pd_title')}</h2>
+        <p class="mg-player-desc">${t('mg_pd_you_face', { name: `<strong>${escapeHtml(opponentName)}</strong>` })}<br>
+        ${t('mg_pd_desc')}</p>
         <div class="mg-pd-buttons">
-            <button class="mg-btn mg-btn-cooperate" id="mg-cooperate">\u{1F91D}<br>Cooperate</button>
-            <button class="mg-btn mg-btn-betray" id="mg-betray">\u{1F5E1}\uFE0F<br>Betray</button>
+            <button class="mg-btn mg-btn-cooperate" id="mg-cooperate">\u{1F91D}<br>${t('mg_pd_cooperate')}</button>
+            <button class="mg-btn mg-btn-betray" id="mg-betray">\u{1F5E1}\uFE0F<br>${t('mg_pd_betray')}</button>
         </div>
         <p class="mg-player-status" id="mg-pd-status"></p>
     `;
@@ -516,13 +579,13 @@ function renderPrisonerPrompt(screen, prompt) {
     document.getElementById('mg-cooperate').addEventListener('click', () => {
         sendMiniGameAction('prisoners_dilemma', { choice: 'cooperate' });
         disableMgButtons(screen);
-        document.getElementById('mg-pd-status').textContent = 'You chose Cooperate. Waiting\u2026';
+        document.getElementById('mg-pd-status').textContent = t('mg_pd_chose_cooperate');
     });
 
     document.getElementById('mg-betray').addEventListener('click', () => {
         sendMiniGameAction('prisoners_dilemma', { choice: 'betray' });
         disableMgButtons(screen);
-        document.getElementById('mg-pd-status').textContent = 'You chose Betray. Waiting\u2026';
+        document.getElementById('mg-pd-status').textContent = t('mg_pd_chose_betray');
     });
 }
 
@@ -533,11 +596,10 @@ function renderTrustCirclePrompt(screen, prompt) {
     let order = otherPlayers.map((p, i) => ({ ...p, idx: i }));
 
     screen.innerHTML = `
-        <h2 class="mg-player-title">\u{1F535} Trust Circle</h2>
-        <p class="mg-player-desc">Rank other players from most trusted (top) to least trusted (bottom).<br>
-        Tap \u25B2 \u25BC to reorder.</p>
+        <h2 class="mg-player-title">\u{1F535} ${t('mg_tc_title')}</h2>
+        <p class="mg-player-desc">${t('mg_tc_desc')}</p>
         <div class="mg-tc-list" id="mg-tc-list"></div>
-        <button class="btn-primary mg-submit-btn" id="mg-tc-submit">Submit Rankings</button>
+        <button class="btn-primary mg-submit-btn" id="mg-tc-submit">${t('mg_tc_submit')}</button>
         <p class="mg-player-status" id="mg-tc-status"></p>
     `;
 
@@ -574,7 +636,7 @@ function renderTrustCirclePrompt(screen, prompt) {
         const ranked_ids = order.map(p => p.id);
         sendMiniGameAction('trust_circle', { ranked_player_ids: ranked_ids });
         document.getElementById('mg-tc-submit').disabled = true;
-        document.getElementById('mg-tc-status').textContent = 'Rankings submitted. Waiting\u2026';
+        document.getElementById('mg-tc-status').textContent = t('mg_tc_submitted');
     });
 }
 
@@ -582,26 +644,26 @@ function renderTrustCirclePrompt(screen, prompt) {
 
 function renderAlibiPrompt(screen, prompt) {
     const isTarget = prompt.is_target || false;
-    const targetName = prompt.target_name || 'Someone';
+    const targetName = prompt.target_name || t('mg_someone');
     const timerSecs = prompt.timer_secs || 30;
 
     if (isTarget) {
         screen.innerHTML = `
-            <h2 class="mg-player-title">\u{1F526} You're in the Spotlight!</h2>
-            <p class="mg-player-desc">Defend yourself! Others will judge you.</p>
+            <h2 class="mg-player-title">\u{1F526} ${t('mg_alibi_spotlight_title')}</h2>
+            <p class="mg-player-desc">${t('mg_alibi_spotlight_desc')}</p>
             <div class="mg-alibi-timer" id="mg-alibi-timer">${timerSecs}</div>
-            <p class="mg-player-status">Speak now \u2014 convince them you're innocent!</p>
+            <p class="mg-player-status">${t('mg_alibi_spotlight_speak')}</p>
         `;
         startMiniGameTimer(timerSecs, document.getElementById('mg-alibi-timer'));
     } else {
         screen.innerHTML = `
-            <h2 class="mg-player-title">\u{1F526} Alibi Challenge</h2>
-            <p class="mg-player-desc"><strong>${escapeHtml(targetName)}</strong> is defending themselves.</p>
+            <h2 class="mg-player-title">\u{1F526} ${t('mg_alibi_title')}</h2>
+            <p class="mg-player-desc">${t('mg_alibi_defending', { name: `<strong>${escapeHtml(targetName)}</strong>` })}</p>
             <div class="mg-alibi-timer" id="mg-alibi-timer">${timerSecs}</div>
-            <p class="mg-player-desc">Do you believe them?</p>
+            <p class="mg-player-desc">${t('mg_alibi_believe_question')}</p>
             <div class="mg-alibi-vote-btns">
-                <button class="mg-btn mg-btn-thumbsup" id="mg-thumbsup">\u{1F44D}<br>Believe</button>
-                <button class="mg-btn mg-btn-thumbsdown" id="mg-thumbsdown">\u{1F44E}<br>Doubt</button>
+                <button class="mg-btn mg-btn-thumbsup" id="mg-thumbsup">\u{1F44D}<br>${t('mg_alibi_believe')}</button>
+                <button class="mg-btn mg-btn-thumbsdown" id="mg-thumbsdown">\u{1F44E}<br>${t('mg_alibi_doubt')}</button>
             </div>
             <p class="mg-player-status" id="mg-alibi-status"></p>
         `;
@@ -611,13 +673,13 @@ function renderAlibiPrompt(screen, prompt) {
         document.getElementById('mg-thumbsup').addEventListener('click', () => {
             sendMiniGameAction('alibi_challenge', { vote: 'thumbs_up' });
             disableMgButtons(screen);
-            document.getElementById('mg-alibi-status').textContent = 'You voted \u{1F44D}. Waiting\u2026';
+            document.getElementById('mg-alibi-status').textContent = t('mg_alibi_voted_up');
         });
 
         document.getElementById('mg-thumbsdown').addEventListener('click', () => {
             sendMiniGameAction('alibi_challenge', { vote: 'thumbs_down' });
             disableMgButtons(screen);
-            document.getElementById('mg-alibi-status').textContent = 'You voted \u{1F44E}. Waiting\u2026';
+            document.getElementById('mg-alibi-status').textContent = t('mg_alibi_voted_down');
         });
     }
 }
@@ -626,20 +688,20 @@ function renderAlibiPrompt(screen, prompt) {
 
 function renderInterrogationPrompt(screen, prompt) {
     const role = prompt.role; // 'interrogator' or 'target'
-    const otherName = prompt.other_name || 'a player';
+    const otherName = prompt.other_name || t('mg_another_player');
     const maxQuestions = prompt.max_questions || 3;
 
     if (role === 'interrogator') {
         let questionsAsked = 0;
 
         screen.innerHTML = `
-            <h2 class="mg-player-title">\u{1F50E} Interrogation</h2>
-            <p class="mg-player-desc">Ask <strong>${escapeHtml(otherName)}</strong> up to ${maxQuestions} yes/no questions.</p>
+            <h2 class="mg-player-title">\u{1F50E} ${t('mg_int_title')}</h2>
+            <p class="mg-player-desc">${t('mg_int_ask_desc', { name: `<strong>${escapeHtml(otherName)}</strong>`, count: maxQuestions })}</p>
             <div class="mg-int-input-area">
-                <input type="text" class="mg-int-input" id="mg-int-input" placeholder="Type a yes/no question\u2026" maxlength="200">
-                <button class="btn-primary" id="mg-int-ask">Ask</button>
+                <input type="text" class="mg-int-input" id="mg-int-input" placeholder="${t('mg_int_placeholder')}" maxlength="200">
+                <button class="btn-primary" id="mg-int-ask">${t('mg_int_ask')}</button>
             </div>
-            <p class="mg-player-status" id="mg-int-status">Questions remaining: ${maxQuestions}</p>
+            <p class="mg-player-status" id="mg-int-status">${t('mg_int_questions_remaining', { count: maxQuestions })}</p>
         `;
 
         document.getElementById('mg-int-ask').addEventListener('click', () => {
@@ -651,8 +713,8 @@ function renderInterrogationPrompt(screen, prompt) {
             input.value = '';
             const remaining = maxQuestions - questionsAsked;
             document.getElementById('mg-int-status').textContent = remaining > 0
-                ? `Questions remaining: ${remaining}`
-                : 'All questions asked. Waiting for answers\u2026';
+                ? t('mg_int_questions_remaining', { count: remaining })
+                : t('mg_int_all_asked');
             if (remaining <= 0) {
                 document.getElementById('mg-int-ask').disabled = true;
                 input.disabled = true;
@@ -666,14 +728,14 @@ function renderInterrogationPrompt(screen, prompt) {
     } else {
         // Target role
         screen.innerHTML = `
-            <h2 class="mg-player-title">\u{1F3AF} You're Being Interrogated</h2>
-            <p class="mg-player-desc"><strong>${escapeHtml(otherName)}</strong> is questioning you.</p>
-            <div class="mg-int-question-display" id="mg-int-question">Waiting for question\u2026</div>
+            <h2 class="mg-player-title">\u{1F3AF} ${t('mg_int_target_title')}</h2>
+            <p class="mg-player-desc">${t('mg_int_target_desc', { name: `<strong>${escapeHtml(otherName)}</strong>` })}</p>
+            <div class="mg-int-question-display" id="mg-int-question">${t('mg_int_waiting_question')}</div>
             <div class="mg-int-answer-btns hidden" id="mg-int-answer-btns">
-                <button class="mg-btn mg-btn-yes" id="mg-int-yes">\u2705<br>Yes</button>
-                <button class="mg-btn mg-btn-no" id="mg-int-no">\u274C<br>No</button>
+                <button class="mg-btn mg-btn-yes" id="mg-int-yes">\u2705<br>${t('mg_int_yes')}</button>
+                <button class="mg-btn mg-btn-no" id="mg-int-no">\u274C<br>${t('mg_int_no')}</button>
             </div>
-            <p class="mg-player-status" id="mg-int-status">Waiting for questions\u2026</p>
+            <p class="mg-player-status" id="mg-int-status">${t('mg_int_waiting_questions')}</p>
         `;
 
         // The server will send additional prompts for each question via mini_game_prompt
@@ -689,7 +751,7 @@ function showInterrogationQuestion(question, questionNum) {
     const btns = document.getElementById('mg-int-answer-btns');
     if (!display || !btns) return;
 
-    display.textContent = `Q${questionNum}: ${question}`;
+    display.textContent = t('mg_int_question_format', { num: questionNum, question });
     btns.classList.remove('hidden');
 
     const yesBtn = document.getElementById('mg-int-yes');
@@ -698,7 +760,7 @@ function showInterrogationQuestion(question, questionNum) {
     const handler = (answer) => {
         sendMiniGameAction('interrogation', { answer, question_number: questionNum });
         btns.classList.add('hidden');
-        document.getElementById('mg-int-status').textContent = `Answered Q${questionNum}. Waiting\u2026`;
+        document.getElementById('mg-int-status').textContent = t('mg_int_answered', { num: questionNum });
     };
 
     // Clone and replace to remove old listeners
@@ -731,3 +793,5 @@ function startMiniGameTimer(secs, el) {
         if (remaining <= 0) clearInterval(miniGameTimerInterval);
     }, 1000);
 }
+
+} // end initApp
