@@ -26,6 +26,8 @@ pub enum ClientMessage {
     Reconnect { player_id: String, room_code: String },
     /// Player responds to a mini-game prompt
     MiniGameAction { game_type: MiniGameType, action: serde_json::Value },
+    /// Player signals they are done with their night action
+    NarrationAck,
 }
 
 /// Messages sent from the server to clients.
@@ -85,6 +87,18 @@ pub enum ServerMessage {
     MiniGamePrompt { game_type: MiniGameType, prompt: serde_json::Value },
     /// Mini-game result (sent to host for display)
     MiniGameResult { game_type: MiniGameType, result: serde_json::Value },
+    /// Narration step — sent to host to display text and play audio
+    NarrationStep {
+        key: String,
+        text: String,
+        audio_file: String,
+        wait_for: String,
+        target_player_id: Option<String>,
+    },
+    /// Sent to a specific player when their role is woken up
+    WakeUp { role: String, instruction: String },
+    /// Sent to a player when their night turn is done
+    GoToSleep,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
