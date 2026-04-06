@@ -1,6 +1,6 @@
 const params = new URLSearchParams(window.location.search);
-const roomCode = params.get('room');
-const lang = params.get('lang') || 'en';
+const roomCodeFromUrl = params.get('room');
+const lang = params.get('lang') || localStorage.getItem('suspects_lang') || 'en';
 const ws = new WsClient('/ws/player');
 
 let playerId = null;
@@ -62,6 +62,7 @@ const reconnectOverlay = document.getElementById('reconnect-overlay');
 
 const joinBtn = document.getElementById('join-btn');
 const nameInput = document.getElementById('player-name');
+const roomCodeInput = document.getElementById('room-code-input');
 const readyBtn = document.getElementById('ready-btn');
 const countdownDisplay = document.getElementById('countdown-display');
 const confirmActionBtn = document.getElementById('confirm-action-btn');
@@ -71,12 +72,17 @@ const skipVoteBtn = document.getElementById('skip-vote-btn');
 const chatSendBtn = document.getElementById('chat-send-btn');
 const chatInput = document.getElementById('chat-input');
 
-// Auto-fill saved name and focus
+// Auto-fill saved name and room code from URL
 if (savedName) {
     nameInput.value = savedName;
 }
-if (roomCode) {
+if (roomCodeFromUrl) {
+    roomCodeInput.value = roomCodeFromUrl;
+    roomCodeInput.readOnly = true;
+    roomCodeInput.style.opacity = '0.7';
     nameInput.focus();
+} else {
+    roomCodeInput.focus();
 }
 
 // Connection state tracking — show/hide reconnecting overlay
@@ -94,11 +100,15 @@ ws.onStateChange((state) => {
 joinBtn.addEventListener('click', () => {
     const name = nameInput.value.trim();
     if (!name) return;
-    const code = roomCode || prompt(t('enter_room_code'));
-    if (!code) return;
+    const code = (roomCodeInput.value || '').trim().toUpperCase();
+    if (!code || code.length < 4) {
+        roomCodeInput.classList.add('shake');
+        setTimeout(() => roomCodeInput.classList.remove('shake'), 500);
+        return;
+    }
 
     localStorage.setItem('suspects_player_name', name);
-    ws.send({ type: 'join_room', payload: { room_code: code.toUpperCase(), player_name: name } });
+    ws.send({ type: 'join_room', payload: { room_code: code, player_name: name } });
     joinBtn.disabled = true;
 });
 

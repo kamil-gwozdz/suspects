@@ -183,8 +183,11 @@ function handleRoomCreated({ room_code, room_url }) {
     roomCode = room_code;
     document.getElementById('room-code-display').textContent = room_code;
     
-    const fullUrl = `${window.location.origin}${room_url}`;
-    document.getElementById('join-url').textContent = fullUrl;
+    // QR code links to full URL with room code pre-filled
+    const qrUrl = `${window.location.origin}${room_url}`;
+    // Display simple join URL (player types code manually)
+    const simpleUrl = `${window.location.host}/join`;
+    document.getElementById('join-url').textContent = simpleUrl;
 
     // Preload GM audio manifest (non-blocking, graceful on failure)
     audioManager.preloadFromManifest('/audio/gm/manifest.json');
@@ -193,7 +196,7 @@ function handleRoomCreated({ room_code, room_url }) {
     const qrContainer = document.getElementById('qr-code');
     qrContainer.innerHTML = '';
     const qr = qrcode(0, 'M');
-    qr.addData(fullUrl);
+    qr.addData(qrUrl);
     qr.make();
     const canvas = document.createElement('canvas');
     const cellSize = 4;

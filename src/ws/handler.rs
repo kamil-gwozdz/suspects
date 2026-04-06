@@ -84,7 +84,7 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
 
                     let response = ServerMessage::RoomCreated {
                         room_code: code.clone(),
-                        room_url: format!("/player/?room={}&lang={}", code, language),
+                        room_url: format!("/player/?room={}", code),
                     };
                     let _ = tx.send(serde_json::to_string(&response).unwrap());
                 }

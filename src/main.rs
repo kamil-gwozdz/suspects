@@ -127,6 +127,10 @@ async fn main() {
         .route(
             "/",
             get(|| async { axum::response::Redirect::permanent("/host/") }),
+        )
+        .route(
+            "/join",
+            get(|| async { axum::response::Redirect::permanent("/player/") }),
         );
 
     // Debug: serve static files from disk (supports hot reload).
