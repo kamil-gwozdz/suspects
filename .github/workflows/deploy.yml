@@ -1,0 +1,57 @@
+# Deploy the latest release binary to the VPS.
+#
+# Required GitHub secrets:
+#   VPS_HOST    – IP address or hostname of the server
+#   VPS_USER    – SSH user (e.g. deploy)
+#   VPS_SSH_KEY – Private SSH key for authentication
+
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Download latest release binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo "${{ github.repository }}" \
+            --pattern "suspects-linux-amd64" \
+            --dir .
+
+      - name: Deploy to server
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          # Write SSH key
+          mkdir -p ~/.ssh
+          echo "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Disable strict host key checking for CI
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key "$VPS_USER@$VPS_HOST" << 'REMOTE'
+            set -e
+            sudo mkdir -p /opt/suspects
+            sudo systemctl stop suspects || true
+          REMOTE
+
+          # Upload binary
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key \
+            suspects-linux-amd64 "$VPS_USER@$VPS_HOST:/opt/suspects/suspects"
+
+          # Set permissions and restart
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key "$VPS_USER@$VPS_HOST" << 'REMOTE'
+            set -e
+            sudo chmod +x /opt/suspects/suspects
+            sudo systemctl restart suspects
+          REMOTE
