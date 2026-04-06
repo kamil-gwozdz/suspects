@@ -15,7 +15,7 @@
 body {
     background: var(--bg-dark);
     color: var(--text);
-    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
     margin: 0;
     min-height: 100vh;
     overflow: hidden;
@@ -134,9 +134,23 @@ body {
     background: radial-gradient(ellipse at center, #1a1500 0%, #0a0a0f 70%);
 }
 
-/* Lobby */
+/* Lobby — animated gradient background */
+#lobby-screen {
+    background:
+        linear-gradient(135deg, #0a0a0f 0%, #12101f 25%, #0a0a0f 50%, #151020 75%, #0a0a0f 100%);
+    background-size: 400% 400%;
+    animation: lobbyGradient 15s ease infinite;
+}
+
+@keyframes lobbyGradient {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
 .logo h1 {
     font-size: 5rem;
+    font-weight: 800;
     letter-spacing: 0.3em;
     color: var(--accent);
     text-shadow: 0 0 40px var(--accent-glow);
@@ -152,7 +166,7 @@ body {
 }
 
 .lobby-controls {
-    margin-top: 2rem;
+    margin-top: 2.5rem;
     display: flex;
     gap: 1rem;
     align-items: center;
@@ -194,6 +208,11 @@ select {
 
 .qr-container {
     text-align: center;
+    background: var(--bg-card);
+    padding: 2rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 #qr-code canvas {
@@ -282,6 +301,28 @@ select {
 .phase-view {
     text-align: center;
     animation: phaseEnter 0.8s ease-out;
+}
+
+.phase-view.hidden {
+    display: none;
+}
+
+.phase-view.fade-out {
+    animation: phaseFadeOut 0.4s ease forwards;
+}
+
+.phase-view.fade-in {
+    animation: phaseFadeIn 0.5s ease forwards;
+}
+
+@keyframes phaseFadeOut {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes phaseFadeIn {
+    from { opacity: 0; transform: scale(1.04); }
+    to   { opacity: 1; transform: scale(1); }
 }
 
 .phase-view h2 {
@@ -832,12 +873,13 @@ select {
     opacity: 0;
     animation: cardReveal 0.5s ease-out forwards;
     animation-delay: var(--card-delay, 0s);
-    transition: transform 0.3s, box-shadow 0.3s;
+    transition: transform 0.35s cubic-bezier(.34,1.56,.64,1), box-shadow 0.35s ease, border-color 0.35s ease;
 }
 
 .role-reveal-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+    transform: translateY(-6px) scale(1.03);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(231, 76, 60, 0.1);
+    border-color: rgba(231, 76, 60, 0.3);
 }
 
 @keyframes cardReveal {

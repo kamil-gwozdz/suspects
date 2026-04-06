@@ -16,7 +16,7 @@
 body {
     background: var(--bg-dark);
     color: var(--text);
-    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
     min-height: 100vh;
     min-height: 100dvh;
     overflow-x: hidden;
@@ -31,9 +31,15 @@ body {
     min-height: 100dvh;
     padding: 2rem 1.5rem;
     gap: 1.5rem;
+    animation: screenFadeIn 0.4s ease-out;
 }
 
 .screen.active { display: flex; }
+
+@keyframes screenFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
 
 .logo-small {
     font-size: clamp(1.4rem, 7vw, 2rem);
@@ -74,15 +80,17 @@ body {
     border: none;
     padding: 1rem 2rem;
     font-size: 1.1rem;
+    font-weight: 600;
     border-radius: 12px;
     cursor: pointer;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
     width: 100%;
 }
 
 .btn-primary:hover { background: #c0392b; }
+.btn-primary:active:not(:disabled) { transform: scale(0.96); }
 .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btn-secondary {
@@ -91,10 +99,14 @@ body {
     border: 1px solid #333;
     padding: 0.8rem 2rem;
     font-size: 1rem;
+    font-weight: 500;
     border-radius: 12px;
     cursor: pointer;
+    transition: all 0.2s ease;
     width: 100%;
 }
+
+.btn-secondary:active:not(:disabled) { transform: scale(0.96); }
 
 .error-text { color: var(--accent); font-size: 0.9rem; }
 
@@ -126,7 +138,7 @@ body {
 
 .role-card-inner {
     background: var(--bg-card);
-    border: 2px solid var(--accent);
+    border: 2px solid transparent;
     border-radius: 16px;
     padding: 2rem;
     height: 100%;
@@ -136,6 +148,33 @@ body {
     justify-content: center;
     gap: 1rem;
     animation: cardReveal 0.8s ease;
+    position: relative;
+    background-clip: padding-box;
+}
+
+/* Shimmer gradient border */
+.role-card-inner::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 18px;
+    background: linear-gradient(
+        135deg,
+        var(--accent) 0%,
+        #f39c12 25%,
+        var(--accent) 50%,
+        #9b59b6 75%,
+        var(--accent) 100%
+    );
+    background-size: 300% 300%;
+    animation: shimmerBorder 4s linear infinite;
+    z-index: -1;
+}
+
+@keyframes shimmerBorder {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
 }
 
 @keyframes cardReveal {
@@ -174,26 +213,29 @@ body {
 .target-list {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.6rem;
     width: 100%;
     max-width: min(300px, 100%);
     max-height: 60vh;
     overflow-y: auto;
+    padding: 0.25rem;
 }
 
 .target-btn {
     background: var(--bg-card);
     border: 2px solid #333;
     color: var(--text);
-    padding: 1rem;
+    padding: 1rem 1.2rem;
     border-radius: 12px;
     font-size: 1.1rem;
+    font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s ease;
     text-align: left;
 }
 
-.target-btn:hover { border-color: var(--accent); }
+.target-btn:hover { border-color: var(--accent); background: rgba(231, 76, 60, 0.05); }
+.target-btn:active { transform: scale(0.97); }
 .target-btn.selected {
     border-color: var(--accent);
     background: rgba(231, 76, 60, 0.15);
@@ -348,6 +390,7 @@ body {
 }
 
 .mg-btn:hover:not(:disabled) { border-color: var(--accent); }
+.mg-btn:active:not(:disabled) { transform: scale(0.96); }
 .mg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .mg-btn-cooperate:hover:not(:disabled) {
@@ -410,6 +453,7 @@ body {
 }
 
 .mg-arrow-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.mg-arrow-btn:active:not(:disabled) { transform: scale(0.9); }
 .mg-arrow-btn:disabled { opacity: 0.2; cursor: not-allowed; }
 
 .mg-submit-btn {
