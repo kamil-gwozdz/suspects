@@ -17,9 +17,9 @@ One screen (TV or computer) displays the main game board. Players join from thei
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/player-join.png" alt="Player join screen" width="250">
+  <img src="docs/screenshots/player-join.png" alt="Player join screen" width="300">
   &nbsp;&nbsp;&nbsp;
-  <img src="docs/screenshots/player-role.png" alt="Player role card" width="250">
+  <img src="docs/screenshots/player-role.png" alt="Player role card" width="300">
   <br><em>Player screens — join on your phone, receive your secret role</em>
 </p>
 
