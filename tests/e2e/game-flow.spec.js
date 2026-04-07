@@ -363,7 +363,10 @@ test.describe('Suspects E2E — Full Game Flow', () => {
             await page.waitForSelector('#waiting-screen.active', { timeout: 5000 });
             playerPages.push(page);
 
-            if (i === 0) await snap(page, `player-Alice-joined`, { phase: 'Lobby', device: 'phone', playerName: 'Alice', group: 'player-join' });
+            if (i === 0) {
+                await page.waitForTimeout(600); // wait for screenFadeIn animation
+                await snap(page, `player-Alice-joined`, { phase: 'Lobby', device: 'phone', playerName: 'Alice', group: 'player-join' });
+            }
         }
 
         await host.waitForTimeout(1000);

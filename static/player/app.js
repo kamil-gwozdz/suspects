@@ -378,33 +378,31 @@ function handleRoleRevealFlip({ role, role_name, description, faction, is_you })
         factionEl.className = `role-faction ${playerFaction}`;
 
         document.getElementById('reveal-your-role-label').textContent = t('your_role') || 'Your Role';
+
+        // Reset card to face-down, then flip to reveal
+        flipCard.classList.remove('flipped');
+        showScreen(roleScreen);
+        setTimeout(() => flipCard.classList.add('flipped'), 500);
     } else {
-        // NOT this player's role — show blank/mystery card
+        // Already know our role — just ignore other reveals (keep card showing own role)
+        if (playerRole) return;
+
+        // Haven't seen own role yet — show mystery card with brief flip
         document.getElementById('role-icon').textContent = '❓';
         document.getElementById('role-name').textContent = '???';
         document.getElementById('role-description').textContent = '';
         const factionEl = document.getElementById('role-faction');
         factionEl.textContent = '';
         factionEl.className = 'role-faction';
-
         document.getElementById('reveal-your-role-label').textContent = '';
+
+        flipCard.classList.remove('flipped');
+        showScreen(roleScreen);
+        setTimeout(() => {
+            flipCard.classList.add('flipped');
+            setTimeout(() => flipCard.classList.remove('flipped'), 2000);
+        }, 500);
     }
-
-    // Reset card to face-down
-    flipCard.classList.remove('flipped');
-    showScreen(roleScreen);
-
-    // After a short delay, flip it
-    setTimeout(() => {
-        flipCard.classList.add('flipped');
-
-        // If NOT the player's role, flip back after 2s
-        if (!is_you) {
-            setTimeout(() => {
-                flipCard.classList.remove('flipped');
-            }, 2000);
-        }
-    }, 500);
 }
 
 function handlePhaseChanged({ phase, round, timer_secs }) {

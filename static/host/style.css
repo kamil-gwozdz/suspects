@@ -1379,7 +1379,7 @@ select {
     position: fixed;
     inset: 0;
     z-index: 900;
-    background: rgba(0, 0, 0, 0.70);
+    background: rgba(0, 0, 0, 0.85);
     backdrop-filter: blur(4px);
     display: flex;
     flex-direction: column;

@@ -115,9 +115,9 @@ body {
 }
 
 .btn-secondary {
-    background: transparent;
-    color: #ccc;
-    border: 1px solid #666;
+    background: rgba(255, 255, 255, 0.08);
+    color: #e0e0e0;
+    border: 2px solid #888;
     padding: 0.8rem 2rem;
     font-size: 1rem;
     font-weight: 500;
@@ -161,9 +161,9 @@ body {
     width: 180px;
     height: 180px;
     border-radius: 50%;
-    border: 3px solid #666;
+    border: 3px solid #999;
     background: var(--bg-card);
-    color: #e0e0e0;
+    color: #fff;
     font-size: 1.3rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -193,9 +193,8 @@ body {
 }
 
 .tap-hint {
-    color: #ccc;
+    color: #ddd;
     font-size: 0.85rem;
-    opacity: 0.85;
 }
 
 /* Countdown display */
