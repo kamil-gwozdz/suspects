@@ -19,7 +19,8 @@ function generateReport(reportEntries, screenshotDir) {
     }
     if (currentItems.length > 0) sections.push({ group: currentGroup, items: currentItems });
 
-    const sectionsHtml = sections.map(section => {
+    const totalSections = sections.length;
+    const sectionsHtml = sections.map((section, sIdx) => {
         const first = section.items[0];
         const isPhoneGroup = section.items.length > 1 && section.items.every(i => i.device === 'phone');
         const phase = first.phase || section.group;
@@ -47,13 +48,14 @@ function generateReport(reportEntries, screenshotDir) {
             }).join('\n');
         }
 
+        const stepLabel = '<span class="step-badge">Step ' + (sIdx + 1) + '/' + totalSections + '</span>';
         const phaseBadge = phase ? '<span class="phase-badge">' + phase + '</span>' : '';
         const deviceBadge = '<span class="device-badge ' + first.device + '">' +
             (first.device === 'tv' ? '\u{1F5A5}\u{FE0F} TV' : '\u{1F4F1} Phones') + '</span>';
         const narratorSpan = narrator ? '<span class="narrator-text">' + narrator + '</span>' : '';
 
-        return '<div class="section">' +
-            '<div class="section-header">' + phaseBadge + deviceBadge + narratorSpan + '</div>' +
+        return '<div class="section" id="step-' + (sIdx + 1) + '">' +
+            '<div class="section-header">' + stepLabel + phaseBadge + deviceBadge + narratorSpan + '</div>' +
             content + '</div>';
     }).join('\n');
 
@@ -71,6 +73,7 @@ h1 { text-align: center; font-size: 2.5rem; color: #e74c3c; letter-spacing: 0.2e
 .section { margin-bottom: 3rem; border-bottom: 1px solid #222; padding-bottom: 2rem; position: relative; }
 .section-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .phase-badge { background: #e74c3c; color: white; padding: 0.3rem 1rem; border-radius: 20px; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+.step-badge { background: #333; color: #fff; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .narrator-text { color: #f1c40f; font-style: italic; font-size: 1.1rem; }
 .narrator-text::before { content: '\u{1F399}\u{FE0F} '; }
 .device-badge { font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 10px; background: #222; color: #888; }

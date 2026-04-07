@@ -14,10 +14,12 @@ Every UI change (CSS, HTML, JS affecting visuals) **must** include:
 
 There is a Playwright E2E test at `tests/e2e/game-flow.spec.js` that:
 - Starts the Rust server, creates a room, joins 6 players, plays through a full game
-- Saves **sequential screenshots** to `./tmp/` at every game phase
+- Saves **sequential screenshots** (PNG) and **animation GIFs** to `./tmp/`
+- Generates `./tmp/report.html` — an interactive timeline with step numbers, carousels, and narrator text
 - Run it with: `npm run test:e2e`
 - **Run this test during development** to visually verify UI changes
-- **Review the screenshots** in `./tmp/` after each run to check for visual issues
+- **Use a sub-agent to review screenshots** — analyze `./tmp/` images via an explore agent to save main context
+- The report has "Step X/Y" labels — reference these when discussing issues
 - The test takes ~2 minutes (builds server + runs full game flow)
 
 ## Tech Stack

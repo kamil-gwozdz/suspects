@@ -198,11 +198,13 @@ function waitForWsMessage(page, messageType, timeout = 15000) {
 // Stops when the target phase is reached on the host screen
 async function advanceNarration(host, playerPages, targetPhase, maxSteps = 40) {
     for (let step = 0; step < maxSteps; step++) {
-        // Click "Next" on host if visible
-        const nextBtn = host.locator('#narration-next-btn:not(.hidden)');
-        if (await nextBtn.isVisible().catch(() => false)) {
-            await nextBtn.click();
-            await host.waitForTimeout(600);
+        // Click any visible "Next" button — narration or role reveal
+        for (const selector of ['#reveal-next-btn:not(.hidden)', '#narration-next-btn:not(.hidden)']) {
+            const btn = host.locator(selector);
+            if (await btn.isVisible().catch(() => false)) {
+                await btn.click();
+                await host.waitForTimeout(600);
+            }
         }
 
         // Handle player night actions — select target + confirm
@@ -351,8 +353,10 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         }
         await snapPlayersGif(playerPages, 'players-role-flip', { phase: 'RoleReveal' }, 2000, 8);
 
+        // Advance through remaining role reveals to reach Night
+        await advanceNarration(host, playerPages, 'night', 30);
+
         // === NIGHT PHASE ===
-        try { await host.waitForSelector('#night-view:not(.hidden)', { timeout: 15000 }); } catch {}
         await host.waitForTimeout(1000);
         await snap(host, 'host-night', { phase: 'Night', device: 'tv' });
         await snapPlayers(playerPages, 'players-night', { phase: 'Night' });
