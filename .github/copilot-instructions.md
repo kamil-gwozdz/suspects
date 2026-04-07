@@ -44,3 +44,35 @@ There is a Playwright E2E test at `tests/e2e/game-flow.spec.js` that:
 - `cargo fmt` and `cargo test` must pass before committing
 - i18n: all 5 language files must have the same keys
 - Commit messages include `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
+
+## Parallel Development with Git Worktrees
+
+When fixing multiple independent issue groups (e.g., CSS visual fixes + game logic fixes), use git worktrees to parallelize:
+
+1. **Create a worktree for each independent track:**
+   ```bash
+   git worktree add ../suspects-<name> -b fix/<branch-name>
+   ```
+
+2. **Rules for parallel work:**
+   - Each worktree must touch DIFFERENT files — no overlapping edits
+   - If E2E tests need to run, use different server ports per worktree (e.g., PORT=8081, PORT=8082)
+   - CSS/HTML changes can be safely separated from Rust/logic changes
+   - Test file changes should only happen in ONE worktree
+
+3. **Merging back:**
+   ```bash
+   cd ~/Work/suspects  # main worktree
+   git merge fix/<branch-name>
+   git worktree remove ../suspects-<name>
+   ```
+
+4. **Port allocation for E2E tests:**
+   - Main worktree: PORT=8080 (default)
+   - Visual fixes worktree: PORT=8081
+   - Other worktrees: PORT=8082+
+
+5. **Sub-agent usage:**
+   - Use `general-purpose` agents for worktree-isolated tasks (CSS, docs, independent logic)
+   - Use `explore` agents for screenshot/report analysis (read-only, no conflicts)
+   - Never run two agents that edit the same file
