@@ -126,11 +126,17 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         // === PLAYER SCREENS ===
         const playerPages = [];
         for (let i = 0; i < PLAYER_COUNT; i++) {
+            // Each player gets a fully isolated browser context (separate localStorage, cookies, WS)
             const ctx = await browser.newContext({
                 viewport: { width: 390, height: 844 },
                 isMobile: true,
+                storageState: { cookies: [], origins: [] },
             });
             const page = await ctx.newPage();
+            // Clear any stale state before navigating
+            await page.addInitScript(() => {
+                localStorage.clear();
+            });
             await page.goto(`${BASE}/player/?room=${roomCode}`);
             await page.waitForLoadState('networkidle');
 
