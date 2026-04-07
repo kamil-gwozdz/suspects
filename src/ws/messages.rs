@@ -100,15 +100,21 @@ pub enum ServerMessage {
         target_name: String,
         appears_guilty: bool,
     },
-    /// Vote update (broadcast)
+    /// Vote update — full details, sent to HOST only
     VoteUpdate {
         votes: Vec<VoteInfo>,
         timer_remaining: u32,
     },
-    /// Vote result
+    /// Vote count — sent to PLAYERS during voting (secret ballot)
+    VoteCount {
+        votes_cast: usize,
+        total_voters: usize,
+    },
+    /// Vote result — reveals all votes to everyone
     VoteResult {
         target: Option<PlayerInfo>,
         was_lynched: bool,
+        votes: Vec<VoteInfo>,
     },
     /// Game over
     GameOver {

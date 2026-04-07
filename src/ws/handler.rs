@@ -634,7 +634,7 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                             });
                         }
 
-                        // Broadcast vote update
+                        // Broadcast vote update — full details to host, count only to players
                         let vote_msg = ServerMessage::VoteUpdate {
                             votes: room
                                 .votes
@@ -655,7 +655,14 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                         };
                         let json = serde_json::to_string(&vote_msg).unwrap();
                         room.send_to_host(&json);
-                        room.broadcast_to_players(&json);
+
+                        // Players only see the count (secret ballot)
+                        let count_msg = ServerMessage::VoteCount {
+                            votes_cast: room.votes.len(),
+                            total_voters: room.alive_players().len(),
+                        };
+                        let count_json = serde_json::to_string(&count_msg).unwrap();
+                        room.broadcast_to_players(&count_json);
 
                         // If all alive players have voted, resolve immediately
                         let alive_count = room.alive_players().len();
@@ -1331,9 +1338,27 @@ fn resolve_and_send_vote_result(room: &mut Room, pool: &Option<SqlitePool>) {
         (None, false)
     };
 
+    // Build full vote list for reveal
+    let all_votes: Vec<crate::ws::messages::VoteInfo> = room
+        .votes
+        .iter()
+        .map(|(voter_id, target)| {
+            let voter_name = room
+                .get_player(voter_id)
+                .map(|p| p.name.clone())
+                .unwrap_or_default();
+            crate::ws::messages::VoteInfo {
+                voter_id: voter_id.clone(),
+                voter_name,
+                target_id: target.clone(),
+            }
+        })
+        .collect();
+
     let result_msg = ServerMessage::VoteResult {
         target: target_info,
         was_lynched,
+        votes: all_votes,
     };
     let json = serde_json::to_string(&result_msg).unwrap();
     room.send_to_host(&json);

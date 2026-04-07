@@ -200,7 +200,13 @@ ws.onMessage((msg) => {
             handleInvestigation(msg.payload);
             break;
         case 'vote_update':
-            handleVoteUpdate(msg.payload);
+            // Host-only message, players won't receive this anymore
+            break;
+        case 'vote_count':
+            handleVoteCount(msg.payload);
+            break;
+        case 'vote_result':
+            handleVoteResultOnPlayer(msg.payload);
             break;
         case 'auto_start_countdown':
             handleAutoStartCountdown(msg.payload);
@@ -534,11 +540,28 @@ function buildVoteTargetList() {
 }
 
 function handleVoteUpdate({ votes }) {
-    // Update voter badges on each target
+    // Full vote details — only used if received (host-forwarded or legacy)
+    updateVoteDisplay(votes);
+}
+
+function handleVoteCount({ votes_cast, total_voters }) {
+    // Secret ballot — player only sees the count, not who voted for whom
+    const statusEl = document.getElementById('vote-status');
+    statusEl.textContent = t('votes_cast_count', { count: votes_cast, total: total_voters });
+}
+
+function handleVoteResultOnPlayer({ target, was_lynched, votes }) {
+    // Votes revealed! Show who voted for whom
+    if (votes && votes.length > 0) {
+        updateVoteDisplay(votes);
+    }
+}
+
+function updateVoteDisplay(votes) {
     const votesByTarget = {};
     votes.forEach(v => {
         const tid = v.target_id;
-        if (!tid) return; // abstain
+        if (!tid) return;
         if (!votesByTarget[tid]) votesByTarget[tid] = [];
         votesByTarget[tid].push(v.voter_name);
     });
@@ -549,7 +572,6 @@ function handleVoteUpdate({ votes }) {
         el.innerHTML = voterNames.map(n =>
             `<span class="voter-badge">${escapeHtml(n)}</span>`
         ).join('');
-        // Highlight rows with votes
         const row = el.closest('.vote-target-row');
         if (row) {
             row.classList.toggle('has-votes', voterNames.length > 0);
@@ -564,10 +586,8 @@ function handleVoteUpdate({ votes }) {
         }
     });
 
-    // Update status bar
-    const totalVotes = votes.length;
     const statusEl = document.getElementById('vote-status');
-    statusEl.textContent = t('votes_cast_count', { count: totalVotes, total: alivePlayersCache.length });
+    statusEl.textContent = t('votes_cast_count', { count: votes.length, total: alivePlayersCache.length });
 }
 
 function handleGameOver({ winner, player_roles }) {
