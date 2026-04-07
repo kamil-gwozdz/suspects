@@ -910,8 +910,8 @@ function handleNarrationStep(payload) {
     const waitFor = payload.wait_for || payload.wait_type || 'Duration';
     const subtitle = payload.subtitle || false;
 
-    // Show "votes_are_in" as a non-blocking subtitle so VoteResult stays visible
-    const isSubtitle = subtitle || key === 'voting.votes_are_in';
+    // Show "votes_are_in" in full overlay mode so Next button works
+    const isSubtitle = subtitle && key !== 'voting.votes_are_in';
 
     const overlay       = document.getElementById('narration-overlay');
     const narrationText = document.getElementById('narration-text');
@@ -930,16 +930,6 @@ function handleNarrationStep(payload) {
         overlay.classList.add('hidden');
         subtitleText.textContent = text;
         subtitleBar.classList.remove('hidden');
-
-        // For votes_are_in with HostAdvance, show Next button inside subtitle bar
-        if (key === 'voting.votes_are_in') {
-            nextBtn.classList.remove('hidden');
-            nextBtn.onclick = () => {
-                nextBtn.classList.add('hidden');
-                subtitleBar.classList.add('hidden');
-                ws.send({ type: 'narration_next' });
-            };
-        }
     } else {
         // Full overlay mode
         subtitleBar.classList.add('hidden');
