@@ -191,31 +191,53 @@ body {
     to   { transform: scale(1);   opacity: 1; }
 }
 
-/* Role Card */
-.role-card {
+/* Role Card — Flip Animation */
+.flip-card {
     perspective: 1000px;
     width: 280px;
     height: 400px;
+    margin: auto;
 }
 
-.role-card-inner {
-    background: var(--bg-card);
-    border: 2px solid transparent;
-    border-radius: 16px;
-    padding: 2rem;
+.flip-card-inner {
+    position: relative;
+    width: 100%;
     height: 100%;
+    transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-style: preserve-3d;
+}
+
+.flip-card.flipped .flip-card-inner {
+    transform: rotateY(180deg);
+}
+
+.flip-card-front, .flip-card-back {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    border-radius: 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 1rem;
-    animation: cardReveal 0.8s ease;
-    position: relative;
-    background-clip: padding-box;
+    padding: 1.5rem;
 }
 
-/* Shimmer gradient border */
-.role-card-inner::before {
+.flip-card-front {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 2px solid #333;
+}
+
+.flip-card-back {
+    background: var(--bg-card, #14141f);
+    border: 2px solid #333;
+    transform: rotateY(180deg);
+    gap: 0.8rem;
+    position: relative;
+}
+
+/* Shimmer gradient border on back */
+.flip-card-back::before {
     content: '';
     position: absolute;
     inset: -2px;
@@ -239,9 +261,17 @@ body {
     100% { background-position: 0% 50%; }
 }
 
-@keyframes cardReveal {
-    from { transform: rotateY(180deg); opacity: 0; }
-    to { transform: rotateY(0); opacity: 1; }
+.card-back-design {
+    font-size: 5rem;
+    opacity: 0.8;
+}
+
+.card-back-text {
+    font-size: 1.4rem;
+    letter-spacing: 0.3em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-top: 1rem;
 }
 
 .role-icon { font-size: 4rem; }

@@ -112,6 +112,12 @@ ws.onMessage((msg) => {
         case 'narration_step':
             handleNarrationStep(msg.payload);
             break;
+        case 'role_reveal_step':
+            handleRoleRevealStep(msg.payload);
+            break;
+        case 'role_reveal_complete':
+            // Game will transition to Night via PhaseChanged
+            break;
         case 'error':
             showErrorToast(msg.payload.message);
             break;
@@ -399,6 +405,7 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
     // Show appropriate view
     document.querySelectorAll('.phase-view').forEach(el => el.classList.add('hidden'));
     const viewMap = {
+        'role_reveal': 'role-reveal-view',
         'night': 'night-view',
         'dawn': 'dawn-view',
         'day': 'day-view',
@@ -839,6 +846,63 @@ function hideMiniGameOverlay() {
 //   Duration     → auto-advance after max(audio length, duration_secs)
 //   PlayerAction → show "Waiting for players…" indicator
 //   HostAdvance  → show "Next ▶" button for the host
+
+function handleRoleRevealStep({ role, description, faction, count }) {
+    const roleIcons = {
+        civilian: '👤', doctor: '🏥', detective: '🔍', escort: '💃',
+        vigilante: '🔫', mayor: '🎩', spy: '🕵️', mafioso: '🔪',
+        godfather: '👑', consort: '💋', janitor: '🧹', jester: '🃏',
+        serial_killer: '🗡️', survivor: '🛡️', executioner: '⚖️', witch: '🧙',
+    };
+
+    // Switch to game screen if still on lobby
+    lobbyScreen.classList.remove('active');
+    gameScreen.classList.add('active');
+    setPhaseAtmosphere('role_reveal');
+
+    // Show the role reveal view
+    document.querySelectorAll('.phase-view').forEach(el => el.classList.add('hidden'));
+    document.getElementById('role-reveal-view').classList.remove('hidden');
+
+    // Set faction color accent
+    const factionLower = faction.toLowerCase();
+    const card = document.querySelector('.reveal-card-host');
+    card.className = 'reveal-card-host faction-' + factionLower;
+
+    // Populate
+    const badge = document.getElementById('reveal-faction-badge');
+    badge.textContent = faction;
+    badge.className = 'reveal-faction faction-badge-' + factionLower;
+
+    document.getElementById('reveal-role-icon').textContent = roleIcons[role] || '❓';
+
+    const nameEl = document.getElementById('reveal-role-name');
+    nameEl.textContent = formatRoleName(role);
+    nameEl.style.animation = 'none';
+    void nameEl.offsetWidth;
+    nameEl.style.animation = '';
+
+    document.getElementById('reveal-role-desc').textContent = description;
+    document.getElementById('reveal-count').textContent =
+        count === 1 ? '1 player' : count + ' players';
+
+    // Hide narration overlay, show Next button via narration system
+    hideNarration();
+    const overlay = document.getElementById('narration-overlay');
+    const nextBtn = document.getElementById('narration-next-btn');
+    overlay.classList.remove('hidden');
+    document.getElementById('narration-text').textContent = '';
+    nextBtn.classList.remove('hidden');
+    nextBtn.onclick = () => {
+        nextBtn.classList.add('hidden');
+        hideNarration();
+        ws.send({ type: 'narration_next' });
+    };
+}
+
+function formatRoleName(role) {
+    return (role || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
 
 function handleNarrationStep(payload) {
     // Support both old format (audio_key, wait_type, duration_secs, subtitle)

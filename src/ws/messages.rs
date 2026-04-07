@@ -179,6 +179,23 @@ pub enum ServerMessage {
     WakeUp { role: String, instruction: String },
     /// Sent to a player when their night turn is done
     GoToSleep,
+    /// Sent to host: show this role being revealed on the TV
+    RoleRevealStep {
+        role: Role,
+        description: String,
+        faction: String,
+        count: usize,
+    },
+    /// Sent to ALL players: flip your card
+    RoleRevealFlip {
+        role: Role,
+        role_name: String,
+        description: String,
+        faction: String,
+        is_you: bool,
+    },
+    /// Sent to host: all roles have been revealed
+    RoleRevealComplete,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

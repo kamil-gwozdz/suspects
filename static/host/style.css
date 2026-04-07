@@ -1531,3 +1531,86 @@ select {
     border: none;
     cursor: pointer;
 }
+
+/* ═══════════════════════════════════════
+   Role Reveal (TV / Host)
+   ═══════════════════════════════════════ */
+
+#role-reveal-view {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+}
+
+.reveal-card-host {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.2rem;
+    background: var(--bg-card);
+    border: 2px solid #333;
+    border-radius: 24px;
+    padding: 3rem 4rem;
+    min-width: 360px;
+    max-width: 500px;
+    position: relative;
+    animation: revealCardAppear 0.6s ease-out;
+}
+
+.reveal-card-host.faction-town  { border-color: var(--town, #3498db); box-shadow: 0 0 40px rgba(52, 152, 219, 0.25); }
+.reveal-card-host.faction-mafia { border-color: var(--accent, #e74c3c); box-shadow: 0 0 40px rgba(231, 76, 60, 0.25); }
+.reveal-card-host.faction-neutral { border-color: var(--neutral, #9b59b6); box-shadow: 0 0 40px rgba(155, 89, 182, 0.25); }
+
+@keyframes revealCardAppear {
+    from { opacity: 0; transform: scale(0.85); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+.reveal-faction {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    padding: 0.3rem 1.2rem;
+    border-radius: 20px;
+    color: #fff;
+}
+
+.faction-badge-town    { background: var(--town, #3498db); }
+.faction-badge-mafia   { background: var(--accent, #e74c3c); }
+.faction-badge-neutral { background: var(--neutral, #9b59b6); }
+
+.reveal-role-icon { font-size: 5rem; }
+
+.reveal-role-name {
+    font-size: 2.4rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    text-align: center;
+    animation: revealNameSlide 0.5s ease-out;
+}
+
+@keyframes revealNameSlide {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.reveal-role-desc {
+    color: var(--text-dim);
+    text-align: center;
+    font-size: 1.1rem;
+    line-height: 1.5;
+    max-width: 380px;
+}
+
+.reveal-count {
+    color: var(--text-dim);
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+}
+
+/* Atmosphere for role_reveal phase */
+.phase-role_reveal {
+    background: radial-gradient(ellipse at 50% 40%, #12121f 0%, #0a0a0f 100%);
+}

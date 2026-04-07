@@ -38,13 +38,19 @@
 
         <!-- Role Reveal Screen -->
         <div id="role-screen" class="screen">
-            <div class="role-card" id="role-card">
-                <div class="role-card-inner">
-                    <h3 data-i18n="your_role">Your Role</h3>
-                    <div class="role-icon" id="role-icon"></div>
-                    <h2 id="role-name"></h2>
-                    <p id="role-description" class="role-desc"></p>
-                    <div class="role-faction" id="role-faction"></div>
+            <div class="flip-card" id="flip-card">
+                <div class="flip-card-inner">
+                    <div class="flip-card-front">
+                        <div class="card-back-design">🎭</div>
+                        <p class="card-back-text">SUSPECTS</p>
+                    </div>
+                    <div class="flip-card-back">
+                        <h3 id="reveal-your-role-label" data-i18n="your_role">Your Role</h3>
+                        <div class="role-icon" id="role-icon"></div>
+                        <h2 id="role-name"></h2>
+                        <p id="role-description" class="role-desc"></p>
+                        <div class="role-faction" id="role-faction"></div>
+                    </div>
                 </div>
             </div>
         </div>

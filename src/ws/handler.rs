@@ -25,6 +25,50 @@ use crate::game::state::GamePhase;
 use crate::rooms::manager::{AppState, MAX_PLAYERS, Room};
 use crate::ws::messages::{ClientMessage, PlayerInfo, ServerMessage};
 
+/// The canonical reveal order: Town first, then Mafia, then Neutral.
+const ROLE_REVEAL_ORDER: &[Role] = &[
+    Role::Civilian,
+    Role::Doctor,
+    Role::Detective,
+    Role::Escort,
+    Role::Vigilante,
+    Role::Mayor,
+    Role::Spy,
+    Role::Mafioso,
+    Role::Godfather,
+    Role::Consort,
+    Role::Janitor,
+    Role::Jester,
+    Role::Survivor,
+    Role::SerialKiller,
+    Role::Executioner,
+    Role::Witch,
+];
+
+/// Returns a short English description for a role (used on the host TV).
+fn role_host_description(role: Role) -> &'static str {
+    match role {
+        Role::Civilian => {
+            "A regular townsperson. No special ability \u{2014} relies on discussion and voting."
+        }
+        Role::Doctor => "Heals one player each night, protecting them from death.",
+        Role::Detective => "Investigates one player each night to learn their alignment.",
+        Role::Escort => "Blocks a player\u{2019}s night action.",
+        Role::Vigilante => "Can kill one player at night. A dangerous power for Town.",
+        Role::Mayor => "Town leader with political influence.",
+        Role::Spy => "Gathers intelligence on Mafia activity.",
+        Role::Mafioso => "A member of the Mafia. Votes to kill one player each night.",
+        Role::Godfather => "Leads the Mafia. Appears innocent to investigation.",
+        Role::Consort => "Mafia\u{2019}s escort \u{2014} blocks a player\u{2019}s night action.",
+        Role::Janitor => "Cleans the crime scene \u{2014} the victim\u{2019}s role stays hidden.",
+        Role::Jester => "Wins by getting voted out during the day. A wild card.",
+        Role::Survivor => "Wins by staying alive until the end.",
+        Role::SerialKiller => "An independent killer. Immune to Mafia attacks.",
+        Role::Executioner => "Wins by getting a specific target voted out.",
+        Role::Witch => "Redirects players\u{2019} night actions.",
+    }
+}
+
 pub async fn host_ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
@@ -115,7 +159,7 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
 
                         info!(room_code = %code, player_count, "Game starting");
 
-                        // Assign roles
+                        // Assign roles internally
                         let roles = assign_roles(player_count);
                         for (i, player) in room.players.iter_mut().enumerate() {
                             player.role = Some(roles[i]);
@@ -124,29 +168,27 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                         // Transition to RoleReveal
                         room.game_state.next_phase();
 
-                        // Send role to each player
-                        for player in &room.players {
-                            if let Some(role) = player.role {
-                                let msg = ServerMessage::RoleAssigned {
-                                    role,
-                                    description_key: role.description_key().to_string(),
-                                    faction: format!("{:?}", role.faction()),
-                                };
-                                room.send_to_player(
-                                    &player.id,
-                                    &serde_json::to_string(&msg).unwrap(),
-                                );
-                            }
-                        }
+                        // Build the role reveal queue: unique roles in canonical order
+                        let assigned_roles: std::collections::HashSet<Role> =
+                            room.players.iter().filter_map(|p| p.role).collect();
+                        let reveal_queue: Vec<Role> = ROLE_REVEAL_ORDER
+                            .iter()
+                            .copied()
+                            .filter(|r| assigned_roles.contains(r))
+                            .collect();
+                        room.role_reveal_queue = reveal_queue;
 
-                        // Notify host
+                        // Notify host + players of phase change
                         let phase_msg = ServerMessage::PhaseChanged {
                             phase: room.game_state.phase,
                             round: room.game_state.round,
-                            timer_secs: 10,
+                            timer_secs: 0,
                         };
                         let _ = tx.send(serde_json::to_string(&phase_msg).unwrap());
                         room.broadcast_to_players(&serde_json::to_string(&phase_msg).unwrap());
+
+                        // Start the first reveal step
+                        send_next_role_reveal(&mut room);
 
                         // Persist role assignments + phase transition
                         {
@@ -236,7 +278,34 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                 if let Some(ref code) = room_code {
                     if let Some(room_arc) = state.get_room(code).await {
                         let mut room = room_arc.lock().await;
-                        advance_and_execute_narration(&mut room, Some(state.pool.clone()));
+                        // During RoleReveal, NarrationNext advances the reveal queue
+                        if room.game_state.phase == GamePhase::RoleReveal {
+                            if room.role_reveal_queue.is_empty() {
+                                // All roles revealed — transition to Night
+                                let complete_msg = ServerMessage::RoleRevealComplete;
+                                room.send_to_host(&serde_json::to_string(&complete_msg).unwrap());
+
+                                let new_phase = room.game_state.next_phase();
+                                info!(room_code = %code, phase = ?new_phase, "Role reveal complete, advancing to Night");
+
+                                let phase_msg = ServerMessage::PhaseChanged {
+                                    phase: new_phase,
+                                    round: room.game_state.round,
+                                    timer_secs: room.game_state.night_timer_secs,
+                                };
+                                let json = serde_json::to_string(&phase_msg).unwrap();
+                                room.send_to_host(&json);
+                                room.broadcast_to_players(&json);
+
+                                start_night_narration(&mut room, Some(state.pool.clone()));
+
+                                spawn_persist_phase(&Some(state.pool.clone()), &room);
+                            } else {
+                                send_next_role_reveal(&mut room);
+                            }
+                        } else {
+                            advance_and_execute_narration(&mut room, Some(state.pool.clone()));
+                        }
                     }
                 }
             }
@@ -820,6 +889,43 @@ fn send_night_prompts(room: &Room) {
                 };
                 room.send_to_player(&player.id, &serde_json::to_string(&prompt).unwrap());
             }
+        }
+    }
+}
+
+/// Pop the next role from the reveal queue, send RoleRevealStep to host
+/// and RoleRevealFlip to all players.
+fn send_next_role_reveal(room: &mut Room) {
+    if room.role_reveal_queue.is_empty() {
+        return;
+    }
+    let role = room.role_reveal_queue.remove(0);
+    let faction = format!("{:?}", role.faction());
+    let description = role_host_description(role).to_string();
+    let display_name = role_display_name(role).to_string();
+    let count = room.players.iter().filter(|p| p.role == Some(role)).count();
+
+    // Send step to host (TV display)
+    let host_msg = ServerMessage::RoleRevealStep {
+        role,
+        description: description.clone(),
+        faction: faction.clone(),
+        count,
+    };
+    room.send_to_host(&serde_json::to_string(&host_msg).unwrap());
+
+    // Send flip to every player
+    for player in &room.players {
+        let is_you = player.role == Some(role);
+        let flip_msg = ServerMessage::RoleRevealFlip {
+            role,
+            role_name: display_name.clone(),
+            description: description.clone(),
+            faction: faction.clone(),
+            is_you,
+        };
+        if let Some(ref ptx) = player.tx {
+            let _ = ptx.send(serde_json::to_string(&flip_msg).unwrap());
         }
     }
 }

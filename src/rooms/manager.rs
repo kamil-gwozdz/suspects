@@ -57,6 +57,8 @@ pub struct Room {
     pub narration_current: Option<NarrationStep>,
     /// Player IDs we are waiting for before advancing narration.
     pub narration_ack_pending: HashSet<String>,
+    /// Remaining roles to reveal during the RoleReveal phase.
+    pub role_reveal_queue: Vec<Role>,
 }
 
 impl Room {
@@ -76,6 +78,7 @@ impl Room {
             narration_queue: Vec::new(),
             narration_current: None,
             narration_ack_pending: HashSet::new(),
+            role_reveal_queue: Vec::new(),
         }
     }
 
@@ -116,6 +119,7 @@ impl Room {
             narration_queue: Vec::new(),
             narration_current: None,
             narration_ack_pending: HashSet::new(),
+            role_reveal_queue: Vec::new(),
         }
     }
 

@@ -181,6 +181,9 @@ ws.onMessage((msg) => {
         case 'role_assigned':
             handleRoleAssigned(msg.payload);
             break;
+        case 'role_reveal_flip':
+            handleRoleRevealFlip(msg.payload);
+            break;
         case 'phase_changed':
             handlePhaseChanged(msg.payload);
             break;
@@ -338,11 +341,75 @@ function handleRoleAssigned({ role, description_key, faction }) {
     factionEl.textContent = t(`faction_${playerFaction}`) || faction;
     factionEl.className = `role-faction ${playerFaction}`;
 
+    // Show with flip animation
+    const flipCard = document.getElementById('flip-card');
+    flipCard.classList.remove('flipped');
     showScreen(roleScreen);
+    setTimeout(() => flipCard.classList.add('flipped'), 300);
+}
+
+function handleRoleRevealFlip({ role, role_name, description, faction, is_you }) {
+    const roleIcons = {
+        civilian: '👤', doctor: '🏥', detective: '🔍', escort: '💃',
+        vigilante: '🔫', mayor: '🎩', spy: '🕵️', mafioso: '🔪',
+        godfather: '👑', consort: '💋', janitor: '🧹', jester: '🃏',
+        serial_killer: '🗡️', survivor: '🛡️', executioner: '⚖️', witch: '🧙',
+    };
+
+    const flipCard = document.getElementById('flip-card');
+
+    if (is_you) {
+        // This IS the player's role — store it
+        playerRole = role;
+        playerFaction = faction.toLowerCase();
+
+        // Set the card back content to their actual role
+        document.getElementById('role-icon').textContent = roleIcons[role] || '❓';
+        document.getElementById('role-name').textContent = t(`role_name_${role}`) || role_name;
+        document.getElementById('role-description').textContent = t(`role_${role}`) || description;
+        const factionEl = document.getElementById('role-faction');
+        factionEl.textContent = t(`faction_${playerFaction}`) || faction;
+        factionEl.className = `role-faction ${playerFaction}`;
+
+        document.getElementById('reveal-your-role-label').textContent = t('your_role') || 'Your Role';
+    } else {
+        // NOT this player's role — show blank/mystery card
+        document.getElementById('role-icon').textContent = '❓';
+        document.getElementById('role-name').textContent = '???';
+        document.getElementById('role-description').textContent = '';
+        const factionEl = document.getElementById('role-faction');
+        factionEl.textContent = '';
+        factionEl.className = 'role-faction';
+
+        document.getElementById('reveal-your-role-label').textContent = '';
+    }
+
+    // Reset card to face-down
+    flipCard.classList.remove('flipped');
+    showScreen(roleScreen);
+
+    // After a short delay, flip it
+    setTimeout(() => {
+        flipCard.classList.add('flipped');
+
+        // If NOT the player's role, flip back after 2s
+        if (!is_you) {
+            setTimeout(() => {
+                flipCard.classList.remove('flipped');
+            }, 2000);
+        }
+    }, 500);
 }
 
 function handlePhaseChanged({ phase, round, timer_secs }) {
     switch (phase) {
+        case 'role_reveal': {
+            // Show role screen with card face-down, waiting for flips
+            const flipCard = document.getElementById('flip-card');
+            flipCard.classList.remove('flipped');
+            showScreen(roleScreen);
+            break;
+        }
         case 'night':
             // Reset action buttons for new night
             confirmActionBtn.disabled = true;
