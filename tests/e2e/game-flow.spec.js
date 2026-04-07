@@ -383,14 +383,39 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         await host.waitForTimeout(500);
         await snap(host, 'host-game-started', { phase: 'RoleReveal', device: 'tv' });
 
-        // Role reveal — capture card flip animations as GIFs
+        // Role reveal — advance through ALL reveals to Night, then replay flip for GIFs
         for (let i = 0; i < PLAYER_COUNT; i++) {
             try { await playerPages[i].waitForSelector('#role-screen.active', { timeout: 8000 }); } catch {}
         }
+
+        // Advance through all role reveals to Night
+        await advanceNarration(host, playerPages, 'night', 30);
+
+        // Temporarily restore role screen on each player for GIF capture
+        await Promise.all(playerPages.map(p =>
+            p.evaluate(() => {
+                document.getElementById('role-screen').classList.add('active');
+                document.getElementById('sleeping-screen').classList.remove('active');
+                document.getElementById('flip-card').classList.remove('flipped');
+            })
+        ));
+        await playerPages[0].waitForTimeout(200);
+
+        // Trigger flip animation on all phones
+        await Promise.all(playerPages.map(p =>
+            p.evaluate(() => setTimeout(() => document.getElementById('flip-card').classList.add('flipped'), 300))
+        ));
+
+        // Capture GIFs during the flip
         await snapPlayersGif(playerPages, 'players-role-flip', { phase: 'RoleReveal' }, 2000, 8);
 
-        // Advance through remaining role reveals to reach Night
-        await advanceNarration(host, playerPages, 'night', 30);
+        // Restore night/sleeping screen
+        await Promise.all(playerPages.map(p =>
+            p.evaluate(() => {
+                document.getElementById('role-screen').classList.remove('active');
+                document.getElementById('sleeping-screen').classList.add('active');
+            })
+        ));
 
         // ================================================================
         // PHASE 2: DISCOVER ROLES

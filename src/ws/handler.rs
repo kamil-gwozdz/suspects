@@ -227,12 +227,31 @@ async fn handle_host_socket(socket: WebSocket, state: AppState) {
                             continue;
                         }
 
-                        // Voting timer expired while narration is active —
-                        // resolve votes instead of blindly advancing the phase.
-                        if room.game_state.phase == GamePhase::Voting && room.narration_active() {
-                            info!(room_code = %code, "Voting timer expired, resolving votes");
-                            handle_voting_complete(&mut room, Some(state.pool.clone()));
-                            continue;
+                        // Handle timer expiry during narrated phases —
+                        // use the proper phase-completion logic instead of
+                        // blindly advancing (which skips night resolution, dawn
+                        // narration, vote tallying, etc.).
+                        let pool = Some(state.pool.clone());
+                        match room.game_state.phase {
+                            GamePhase::Night => {
+                                info!(room_code = %code, "Night timer expired, force-resolving night");
+                                room.clear_narration();
+                                resolve_night_and_advance_to_dawn(&mut room, pool);
+                                continue;
+                            }
+                            GamePhase::Dawn => {
+                                info!(room_code = %code, "Dawn timer expired, advancing to day");
+                                room.clear_narration();
+                                transition_dawn_to_day(&mut room, pool);
+                                continue;
+                            }
+                            GamePhase::Voting => {
+                                info!(room_code = %code, "Voting timer expired, resolving votes");
+                                room.clear_narration();
+                                handle_voting_complete(&mut room, pool);
+                                continue;
+                            }
+                            _ => {}
                         }
 
                         let new_phase = room.game_state.next_phase();

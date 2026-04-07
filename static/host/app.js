@@ -427,8 +427,19 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
     // Hide mini-game overlay when phase changes
     hideMiniGameOverlay();
 
-    // Start timer
-    if (timer_secs > 0) startTimer(timer_secs);
+    // Start timer — but NOT during night/dawn phases.
+    // Those phases are paced by the narration script; the timer would
+    // fire advance_phase prematurely and skip night resolution / dawn results.
+    // Day and Voting use real countdown timers.
+    const narrationPacedPhases = ['night', 'dawn'];
+    if (timer_secs > 0 && !narrationPacedPhases.includes(phase)) {
+        startTimer(timer_secs);
+    } else {
+        // Clear any leftover timer from a previous phase
+        if (timerInterval) clearInterval(timerInterval);
+        const display = document.getElementById('timer-display');
+        if (display) display.textContent = '';
+    }
 }
 
 function handleNightResults({ killed, saved, events }) {
