@@ -19,9 +19,10 @@ use crate::game::narrator::{
     role_display_name, role_instruction,
 };
 use crate::game::phases::resolve_night;
-use crate::game::roles::{Faction, Role};
+use crate::game::roles::Role;
 use crate::game::scaling::assign_roles;
 use crate::game::state::GamePhase;
+use crate::game::win::{PlayerState as WinPlayerState, check_win};
 use crate::rooms::manager::{AppState, MAX_PLAYERS, Room};
 use crate::ws::messages::{ClientMessage, PlayerInfo, ServerMessage};
 
@@ -1070,6 +1071,84 @@ fn spawn_persist_phase(pool: &Option<SqlitePool>, room: &Room) {
     }
 }
 
+/// Check win conditions and transition to GameOver if a faction has won.
+/// Returns true if the game ended.
+fn check_and_handle_win(room: &mut Room, pool: &Option<SqlitePool>) -> bool {
+    let player_states: Vec<WinPlayerState> = room
+        .players
+        .iter()
+        .filter_map(|p| {
+            p.role.map(|r| WinPlayerState {
+                id: p.id.clone(),
+                role: r,
+                alive: p.alive,
+            })
+        })
+        .collect();
+
+    let winner = match check_win(&player_states) {
+        Some(w) => w,
+        None => return false,
+    };
+
+    let winner_text = match &winner {
+        crate::game::win::Winner::Town => "Town".to_string(),
+        crate::game::win::Winner::Mafia => "Mafia".to_string(),
+        crate::game::win::Winner::SerialKiller => "Serial Killer".to_string(),
+        crate::game::win::Winner::Jester(id) => {
+            let name = room.get_player(id).map(|p| p.name.clone()).unwrap_or_default();
+            format!("Jester ({})", name)
+        }
+        crate::game::win::Winner::Executioner(id) => {
+            let name = room.get_player(id).map(|p| p.name.clone()).unwrap_or_default();
+            format!("Executioner ({})", name)
+        }
+        crate::game::win::Winner::Draw => "Nobody (Draw)".to_string(),
+    };
+
+    info!(winner = %winner_text, "Game over!");
+
+    // Transition to GameOver
+    room.game_state.end_game();
+    room.clear_narration();
+
+    // Build role reveal list
+    let player_roles: Vec<crate::ws::messages::PlayerRoleReveal> = room
+        .players
+        .iter()
+        .filter_map(|p| {
+            p.role.map(|r| crate::ws::messages::PlayerRoleReveal {
+                player_id: p.id.clone(),
+                player_name: p.name.clone(),
+                role: r,
+                alive: p.alive,
+            })
+        })
+        .collect();
+
+    // Send PhaseChanged + GameOver
+    let phase_msg = ServerMessage::PhaseChanged {
+        phase: GamePhase::GameOver,
+        round: room.game_state.round,
+        timer_secs: 0,
+    };
+    let phase_json = serde_json::to_string(&phase_msg).unwrap();
+    room.send_to_host(&phase_json);
+    room.broadcast_to_players(&phase_json);
+
+    let game_over_msg = ServerMessage::GameOver {
+        winner: winner_text,
+        player_roles,
+    };
+    let go_json = serde_json::to_string(&game_over_msg).unwrap();
+    room.send_to_host(&go_json);
+    room.broadcast_to_players(&go_json);
+
+    spawn_persist_phase(pool, room);
+
+    true
+}
+
 /// Resolve all night actions, apply results, and transition to Dawn.
 fn resolve_night_and_advance_to_dawn(room: &mut Room, pool: Option<SqlitePool>) {
     let alive_map: HashMap<String, Role> = room
@@ -1167,6 +1246,11 @@ fn resolve_night_and_advance_to_dawn(room: &mut Room, pool: Option<SqlitePool>) 
     room.send_to_host(&alive_json);
     room.broadcast_to_players(&alive_json);
 
+    // Check win conditions after night deaths
+    if check_and_handle_win(room, &pool) {
+        return;
+    }
+
     // Start dawn narration with victim names
     let death_names: Vec<String> = killed_ids
         .iter()
@@ -1257,6 +1341,11 @@ fn transition_voting_to_execution(room: &mut Room, pool: Option<SqlitePool>) {
     let alive_json = serde_json::to_string(&alive_msg).unwrap();
     room.send_to_host(&alive_json);
     room.broadcast_to_players(&alive_json);
+
+    // Check win conditions after lynch
+    if check_and_handle_win(room, &pool) {
+        return;
+    }
 
     spawn_persist_phase(&pool, room);
 }
