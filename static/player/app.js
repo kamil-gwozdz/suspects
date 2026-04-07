@@ -551,10 +551,8 @@ function handleVoteCount({ votes_cast, total_voters }) {
 }
 
 function handleVoteResultOnPlayer({ target, was_lynched, votes }) {
-    // Votes revealed! Show who voted for whom
-    if (votes && votes.length > 0) {
-        updateVoteDisplay(votes);
-    }
+    // Don't update the voting UI with voter details — that screen is already closed
+    // The phase will change and the host TV displays the full results
 }
 
 function updateVoteDisplay(votes) {
