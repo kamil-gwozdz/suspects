@@ -1,3 +1,7 @@
 /target
 suspects.db
 target/
+test_e2e.db
+tmp/
+node_modules/
+test-results/

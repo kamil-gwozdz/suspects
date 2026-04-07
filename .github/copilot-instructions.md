@@ -10,6 +10,16 @@ Every UI change (CSS, HTML, JS affecting visuals) **must** include:
    - **Player screen:** 390×844 (iPhone)
 4. Crop screenshots to remove excessive empty space
 
+## E2E Browser Test
+
+There is a Playwright E2E test at `tests/e2e/game-flow.spec.js` that:
+- Starts the Rust server, creates a room, joins 6 players, plays through a full game
+- Saves **sequential screenshots** to `./tmp/` at every game phase
+- Run it with: `npm run test:e2e`
+- **Run this test during development** to visually verify UI changes
+- **Review the screenshots** in `./tmp/` after each run to check for visual issues
+- The test takes ~2 minutes (builds server + runs full game flow)
+
 ## Tech Stack
 
 - **Backend:** Rust (Axum) + SQLite (sqlx)
@@ -17,6 +27,7 @@ Every UI change (CSS, HTML, JS affecting visuals) **must** include:
 - **Communication:** WebSocket
 - **All dependencies vendored** — fonts, JS libs served from `static/shared/`
 - **Release binary** embeds all static assets via `rust-embed`
+- **E2E tests:** Playwright (Node.js) — `npm run test:e2e`
 
 ## Architecture
 

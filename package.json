@@ -1,0 +1,24 @@
+{
+  "name": "suspects",
+  "version": "1.0.0",
+  "description": "**A multiplayer Mafia-style party game \u2014 powered by deception, psychology, and social deduction.**",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test:e2e": "npx playwright test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kamil-gwozdz/suspects.git"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/kamil-gwozdz/suspects/issues"
+  },
+  "homepage": "https://github.com/kamil-gwozdz/suspects#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
+  }
+}
