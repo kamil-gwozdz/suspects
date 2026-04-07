@@ -27,9 +27,18 @@ impl Default for GameState {
         Self {
             phase: GamePhase::Lobby,
             round: 0,
-            day_timer_secs: 300,
-            night_timer_secs: 60,
-            voting_timer_secs: 60,
+            day_timer_secs: std::env::var("SUSPECTS_DAY_TIMER")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(300),
+            night_timer_secs: std::env::var("SUSPECTS_NIGHT_TIMER")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(60),
+            voting_timer_secs: std::env::var("SUSPECTS_VOTING_TIMER")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(60),
         }
     }
 }

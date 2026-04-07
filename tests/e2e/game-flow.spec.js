@@ -194,9 +194,14 @@ function waitForWsMessage(page, messageType, timeout = 15000) {
     }, { messageType, timeout });
 }
 
-// Advance narration by clicking Next on host and handling player actions
-// Stops when the target phase is reached on the host screen
-async function advanceNarration(host, playerPages, targetPhase, maxSteps = 40) {
+// Advance narration by clicking Next on host and handling player actions.
+// Stops when the target phase is reached on the host screen (or game over).
+// roleActions: map of player name → target player name for night actions.
+// onNightAction: async callback(playerIndex, playerName, page) called once per player when their night screen is active.
+async function advanceNarration(host, playerPages, targetPhase, maxSteps = 40, roleActions = {}, onNightAction = null) {
+    const actioned = new Set();
+    const snapped = new Set();
+
     for (let step = 0; step < maxSteps; step++) {
         // Click any visible "Next" button — narration or role reveal
         for (const selector of ['#reveal-next-btn:not(.hidden)', '#narration-next-btn:not(.hidden)']) {
@@ -207,29 +212,57 @@ async function advanceNarration(host, playerPages, targetPhase, maxSteps = 40) {
             }
         }
 
-        // Handle player night actions — select target + confirm
-        for (const p of playerPages) {
+        // Handle player night actions — select specific target + confirm
+        for (let pi = 0; pi < playerPages.length; pi++) {
+            const p = playerPages[pi];
+            const name = PLAYER_NAMES[pi];
             try {
                 const nightActive = await p.locator('#night-screen.active').isVisible().catch(() => false);
-                if (nightActive) {
+                if (!nightActive || actioned.has(pi)) continue;
+
+                // Try to select a target
+                const targetName = roleActions[name];
+                let clicked = false;
+                if (targetName) {
+                    const targetBtn = p.locator(`.target-btn:has-text("${targetName}")`);
+                    if (await targetBtn.isVisible().catch(() => false)) {
+                        await targetBtn.click();
+                        clicked = true;
+                        await p.waitForTimeout(150);
+                    }
+                }
+                if (!clicked) {
                     const firstTarget = p.locator('.target-btn').first();
                     if (await firstTarget.isVisible().catch(() => false)) {
                         await firstTarget.click();
+                        clicked = true;
                         await p.waitForTimeout(150);
                     }
+                }
+
+                if (clicked) {
+                    // Screenshot with target selected (once per player)
+                    if (onNightAction && !snapped.has(pi)) {
+                        snapped.add(pi);
+                        await onNightAction(pi, name, p);
+                    }
+                    // Confirm
                     const confirmBtn = p.locator('#confirm-action-btn:not([disabled])');
                     if (await confirmBtn.isVisible().catch(() => false)) {
                         await confirmBtn.click();
+                        actioned.add(pi);
                         await p.waitForTimeout(200);
                     }
                 }
             } catch {}
         }
 
-        // Check if target phase reached
+        // Check if target phase reached (or game over)
         const phaseText = await host.locator('#phase-display').textContent().catch(() => '');
-        if (phaseText && phaseText.toLowerCase().includes(targetPhase.toLowerCase())) {
-            return;
+        if (phaseText) {
+            const lower = phaseText.toLowerCase();
+            if (lower.includes(targetPhase.toLowerCase())) return;
+            if (lower.includes('game over')) return;
         }
         await host.waitForTimeout(400);
     }
@@ -257,6 +290,9 @@ test.describe('Suspects E2E — Full Game Flow', () => {
                     SUSPECTS_PORT: String(PORT),
                     SUSPECTS_BASE_URL: BASE,
                     DATABASE_URL: 'sqlite:test_e2e.db?mode=rwc',
+                    SUSPECTS_DAY_TIMER: '10',
+                    SUSPECTS_NIGHT_TIMER: '10',
+                    SUSPECTS_VOTING_TIMER: '10',
                 },
                 stdio: 'pipe',
             }
@@ -288,7 +324,7 @@ test.describe('Suspects E2E — Full Game Flow', () => {
     });
 
     test('full game flow with screenshots', async () => {
-        test.setTimeout(120000);
+        test.setTimeout(300000);
 
         const browser = await chromium.launch({ headless: true });
 
@@ -356,73 +392,268 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         // Advance through remaining role reveals to reach Night
         await advanceNarration(host, playerPages, 'night', 30);
 
-        // === NIGHT PHASE ===
-        await host.waitForTimeout(1000);
-        await snap(host, 'host-night', { phase: 'Night', device: 'tv' });
-        await snapPlayers(playerPages, 'players-night', { phase: 'Night' });
-
-        // Advance through night → dawn → day
-        await advanceNarration(host, playerPages, 'day', 60);
-
-        // === DAWN ===
-        await host.waitForTimeout(500);
-        await snap(host, 'host-after-night', { phase: 'Dawn / Day', device: 'tv' });
-
-        const phaseAfterDawn = await host.locator('#phase-display').textContent().catch(() => '');
-        if (phaseAfterDawn && phaseAfterDawn.toLowerCase().includes('dawn')) {
-            await advanceNarration(host, playerPages, 'day', 20);
+        // ================================================================
+        // PHASE 2: DISCOVER ROLES
+        // ================================================================
+        const playerRoles = {};
+        for (let i = 0; i < PLAYER_COUNT; i++) {
+            // playerRole is a top-level let in the player's app.js
+            const role = await playerPages[i].evaluate(() => {
+                try { return playerRole; } catch { return null; }
+            });
+            playerRoles[PLAYER_NAMES[i]] = role;
         }
+        console.log('Discovered roles:', playerRoles);
 
-        // === DAY PHASE ===
-        await host.waitForTimeout(500);
-        await snap(host, 'host-day', { phase: 'Day', device: 'tv', narrator: 'Time to discuss. Who is suspicious?' });
-        await snapPlayers(playerPages, 'players-day', { phase: 'Day' });
+        const mafiaPlayers = PLAYER_NAMES.filter(n => playerRoles[n] === 'mafioso');
+        const doctorPlayer = PLAYER_NAMES.find(n => playerRoles[n] === 'doctor');
+        const detectivePlayer = PLAYER_NAMES.find(n => playerRoles[n] === 'detective');
+        const townPlayers = PLAYER_NAMES.filter(n => playerRoles[n] !== 'mafioso');
 
-        // All alive players click "Ready to Vote"
-        for (const p of playerPages) {
-            const readyToVoteBtn = p.locator('#ready-to-vote-btn');
-            if (await readyToVoteBtn.isVisible().catch(() => false)) {
-                await readyToVoteBtn.click();
-                await p.waitForTimeout(200);
+        console.log(`Mafia: ${mafiaPlayers.join(', ')}`);
+        console.log(`Doctor: ${doctorPlayer || 'none'}`);
+        console.log(`Detective: ${detectivePlayer || 'none'}`);
+        console.log(`Town: ${townPlayers.join(', ')}`);
+
+        // Track alive players across rounds
+        const aliveSet = new Set(PLAYER_NAMES);
+
+        async function updateAliveStatus() {
+            try {
+                // Read alive status from the host's player list (set by AlivePlayerList messages)
+                const hostAlive = await host.evaluate(() =>
+                    (typeof alivePlayers !== 'undefined' ? alivePlayers : [])
+                        .filter(p => p.alive)
+                        .map(p => p.name)
+                );
+                for (const name of PLAYER_NAMES) {
+                    if (!hostAlive.includes(name)) aliveSet.delete(name);
+                }
+            } catch (e) {
+                console.log('  Alive status check fell back to DOM:', e.message);
+                for (let i = 0; i < PLAYER_COUNT; i++) {
+                    const isDead = await playerPages[i].locator('#dead-screen.active').isVisible().catch(() => false);
+                    if (isDead) aliveSet.delete(PLAYER_NAMES[i]);
+                }
             }
         }
-        await host.waitForTimeout(1000);
 
-        // === VOTING PHASE ===
-        await advanceNarration(host, playerPages, 'voting', 10);
-        await host.waitForTimeout(500);
-        await snap(host, 'host-voting', { phase: 'Voting', device: 'tv', narrator: 'Time to vote.' });
+        async function getHostPhase() {
+            return (await host.locator('#phase-display').textContent().catch(() => '')).toLowerCase();
+        }
 
-        // Players vote
-        for (let i = 0; i < playerPages.length; i++) {
-            const p = playerPages[i];
-            try {
-                await p.waitForSelector('#vote-screen.active', { timeout: 5000 });
-                await p.waitForTimeout(300);
-                const target = p.locator('.vote-target-row').first();
-                if (await target.isVisible().catch(() => false)) {
-                    await target.click();
+        async function isGameOver() {
+            return (await getHostPhase()).includes('game over');
+        }
+
+        async function forceAdvancePhase() {
+            await host.evaluate(() => ws.send({ type: 'advance_phase' }));
+            await host.waitForTimeout(2000);
+        }
+
+        // Robustly advance to a target phase, using narration + force advance fallback
+        async function advanceToPhase(targetPhase, maxAttempts = 5) {
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                const cur = await getHostPhase();
+                if (cur.includes(targetPhase)) return true;
+                if (cur.includes('game over')) return false;
+
+                if (attempt < 2) {
+                    await advanceNarration(host, playerPages, targetPhase, 15);
+                } else {
+                    await forceAdvancePhase();
+                }
+            }
+            const final_ = await getHostPhase();
+            return final_.includes(targetPhase);
+        }
+
+        // ================================================================
+        // GAME LOOP: Night → Dawn → Day → Voting → Execution → repeat
+        // ================================================================
+        let gameEnded = false;
+
+        for (let round = 1; round <= 4; round++) {
+            console.log(`\n════ ROUND ${round} ════`);
+            if (await isGameOver()) { gameEnded = true; break; }
+
+            // ── NIGHT ──────────────────────────────────────────────
+            console.log(`  Night ${round}...`);
+            await host.waitForTimeout(500);
+            await snap(host, `host-night-r${round}`, { phase: 'Night', device: 'tv' });
+            await snapPlayers(playerPages, `players-night-r${round}`, { phase: 'Night' });
+
+            // Build role-specific actions (targets must exclude self for each player)
+            const aliveTown = townPlayers.filter(n => aliveSet.has(n));
+            const aliveMafia = mafiaPlayers.filter(n => aliveSet.has(n));
+            const aliveAll = [...aliveSet];
+            const roleActions = {};
+
+            if (aliveTown.length > 0) {
+                // Mafia kills first alive town member
+                const mafiaTarget = aliveTown[0];
+                for (const m of aliveMafia) roleActions[m] = mafiaTarget;
+                if (aliveMafia.length > 0) console.log(`  Mafia → ${mafiaTarget}`);
+
+                // Doctor heals someone (excluding self, prefer non-mafia-target)
+                if (doctorPlayer && aliveSet.has(doctorPlayer)) {
+                    const healCandidates = aliveAll.filter(n => n !== doctorPlayer);
+                    const healTarget = healCandidates.find(n => n !== mafiaTarget) || healCandidates[0];
+                    if (healTarget) {
+                        roleActions[doctorPlayer] = healTarget;
+                        console.log(`  Doctor → ${healTarget}`);
+                    }
+                }
+
+                // Detective investigates someone (excluding self, prefer mafia)
+                if (detectivePlayer && aliveSet.has(detectivePlayer)) {
+                    const invCandidates = aliveAll.filter(n => n !== detectivePlayer);
+                    const investigateTarget = invCandidates.find(n => mafiaPlayers.includes(n)) || invCandidates[0];
+                    if (investigateTarget) {
+                        roleActions[detectivePlayer] = investigateTarget;
+                        console.log(`  Detective → ${investigateTarget}`);
+                    }
+                }
+            }
+
+            // Screenshot callback for night actions
+            const nightSnap = async (pi, name, page) => {
+                await snap(page, `player-${name}-night-action-r${round}`, {
+                    phase: 'Night', device: 'phone', playerName: name,
+                    group: `night-actions-r${round}`,
+                });
+            };
+
+            // Advance night narration → dawn
+            await advanceNarration(host, playerPages, 'dawn', 60, roleActions, nightSnap);
+            if (await isGameOver()) { gameEnded = true; break; }
+
+            // ── DAWN ───────────────────────────────────────────────
+            console.log(`  Dawn ${round}...`);
+            await host.waitForTimeout(1000);
+            await snap(host, `host-dawn-r${round}`, { phase: 'Dawn', device: 'tv' });
+            await snapPlayers(playerPages, `players-dawn-r${round}`, { phase: 'Dawn' });
+
+            // Advance dawn narration → day (with robust retry)
+            if (!await advanceToPhase('day', 6)) {
+                console.log('  Could not reach day phase, ending loop');
+                break;
+            }
+            await updateAliveStatus();
+            console.log(`  Alive: ${[...aliveSet].join(', ')}`);
+
+            if (await isGameOver()) { gameEnded = true; break; }
+            if (aliveSet.size < 3) {
+                console.log('  Too few players alive to continue');
+                break;
+            }
+
+            // ── DAY ────────────────────────────────────────────────
+            console.log(`  Day ${round}...`);
+            await host.waitForTimeout(500);
+            await snap(host, `host-day-r${round}`, { phase: 'Day', device: 'tv' });
+            await snapPlayers(playerPages, `players-day-r${round}`, { phase: 'Day' });
+
+            // All alive players click "Ready to Vote"
+            for (let i = 0; i < PLAYER_COUNT; i++) {
+                if (!aliveSet.has(PLAYER_NAMES[i])) continue;
+                const readyBtn = playerPages[i].locator('#ready-to-vote-btn');
+                if (await readyBtn.isVisible().catch(() => false)) {
+                    await readyBtn.click();
+                    await playerPages[i].waitForTimeout(300);
+                }
+            }
+            await host.waitForTimeout(2000);
+
+            // ── VOTING ─────────────────────────────────────────────
+            if (!await advanceToPhase('voting', 6)) {
+                console.log('  Could not reach voting phase, skipping round');
+                break;
+            }
+
+            console.log(`  Voting ${round}...`);
+            await host.waitForTimeout(500);
+            await snap(host, `host-voting-r${round}`, { phase: 'Voting', device: 'tv' });
+
+            // Town votes for first alive mafia; mafia can't self-vote so they pick first available
+            const voteTarget = aliveMafia.length > 0 ? aliveMafia[0] : [...aliveSet][0];
+            console.log(`  Vote target: ${voteTarget}`);
+
+            for (let i = 0; i < PLAYER_COUNT; i++) {
+                if (!aliveSet.has(PLAYER_NAMES[i])) continue;
+                const p = playerPages[i];
+                try {
+                    await p.waitForSelector('#vote-screen.active', { timeout: 8000 });
+                    await p.waitForTimeout(300);
+
+                    // Select vote target by name
+                    const targetRow = p.locator(`.vote-target-row:has-text("${voteTarget}")`);
+                    if (await targetRow.isVisible().catch(() => false)) {
+                        await targetRow.click();
+                    } else {
+                        // Fallback (e.g. can't vote for self)
+                        const firstRow = p.locator('.vote-target-row').first();
+                        if (await firstRow.isVisible().catch(() => false)) await firstRow.click();
+                    }
                     await p.waitForTimeout(200);
+
                     const castBtn = p.locator('#cast-vote-btn:not([disabled])');
                     if (await castBtn.isVisible().catch(() => false)) {
                         await castBtn.click();
                     }
+                } catch (e) {
+                    console.log(`  Vote failed for ${PLAYER_NAMES[i]}: ${e.message}`);
                 }
-            } catch {}
+            }
+
+            await host.waitForTimeout(1500);
+            await snap(host, `host-votes-cast-r${round}`, { phase: 'Voting', device: 'tv' });
+            await snapPlayers(playerPages, `players-voted-r${round}`, { phase: 'Voting' });
+
+            // Advance "votes are in" narration → execution
+            if (!await advanceToPhase('execution', 5)) {
+                console.log('  Could not reach execution phase');
+                break;
+            }
+
+            // ── EXECUTION ──────────────────────────────────────────
+            console.log(`  Execution ${round}...`);
+            await host.waitForTimeout(3000); // Wait for countdown animation
+            await snap(host, `host-execution-r${round}`, { phase: 'Execution', device: 'tv' });
+            await snapPlayers(playerPages, `players-execution-r${round}`, { phase: 'Execution' });
+
+            await updateAliveStatus();
+            console.log(`  Alive after execution: ${[...aliveSet].join(', ')}`);
+
+            if (await isGameOver()) { gameEnded = true; break; }
+
+            // Round summary
+            await snap(host, `host-round-${round}-end`, { phase: `Round ${round}`, device: 'tv' });
+            await snapPlayers(playerPages, `players-round-${round}-end`, { phase: `Round ${round}` });
+
+            // Advance Execution → Night (next round)
+            if (round < 4 && aliveSet.size >= 3) {
+                if (!await advanceToPhase('night', 5)) {
+                    console.log('  Could not advance to next night');
+                    break;
+                }
+                if (await isGameOver()) { gameEnded = true; break; }
+            }
         }
-        await host.waitForTimeout(1000);
-        await snap(host, 'host-votes-cast', { phase: 'Voting', device: 'tv', narrator: 'The votes are in.' });
-        await snapPlayers(playerPages, 'players-voted', { phase: 'Voting' });
 
-        // Advance through voting/execution narration
-        await advanceNarration(host, playerPages, 'execution', 15);
-        await host.waitForTimeout(500);
-        await snap(host, 'host-execution', { phase: 'Execution', device: 'tv' });
-
-        // === FINAL ===
+        // ================================================================
+        // FINAL SCREENSHOTS
+        // ================================================================
+        console.log('\n════ FINAL ════');
         await host.waitForTimeout(1000);
-        await snap(host, 'host-final', { phase: 'Final', device: 'tv' });
-        await snapPlayers(playerPages, 'players-final', { phase: 'Final' });
+
+        if (gameEnded || await isGameOver()) {
+            await snap(host, 'host-gameover', { phase: 'GameOver', device: 'tv' });
+            await snapPlayers(playerPages, 'players-gameover', { phase: 'GameOver' });
+        } else {
+            await snap(host, 'host-final', { phase: 'Final', device: 'tv' });
+            await snapPlayers(playerPages, 'players-final', { phase: 'Final' });
+        }
 
         // Generate HTML report
         generateReport(reportEntries, SCREENSHOT_DIR);
@@ -432,7 +663,7 @@ test.describe('Suspects E2E — Full Game Flow', () => {
 
         const screenshots = fs.readdirSync(SCREENSHOT_DIR).filter(f => f.endsWith('.png') || f.endsWith('.gif'));
         console.log(`\n✅ ${screenshots.length} screenshots saved to ./tmp/`);
-        expect(screenshots.length).toBeGreaterThan(15);
+        expect(screenshots.length).toBeGreaterThan(20);
         expect(fs.existsSync(path.join(SCREENSHOT_DIR, 'report.html'))).toBe(true);
     });
 });
