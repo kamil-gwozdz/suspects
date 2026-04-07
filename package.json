@@ -1,7 +1,7 @@
 {
   "name": "suspects",
   "version": "1.0.0",
-  "description": "**A multiplayer Mafia-style party game \u2014 powered by deception, psychology, and social deduction.**",
+  "description": "**A multiplayer Mafia-style party game — powered by deception, psychology, and social deduction.**",
   "directories": {
     "doc": "docs",
     "test": "tests"
@@ -19,6 +19,8 @@
   },
   "homepage": "https://github.com/kamil-gwozdz/suspects#readme",
   "devDependencies": {
-    "@playwright/test": "^1.59.1"
+    "@playwright/test": "^1.59.1",
+    "gif-encoder-2": "^1.0.5",
+    "png-js": "^1.0.0"
   }
 }

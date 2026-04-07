@@ -17,7 +17,7 @@ let serverProcess;
 function prepareScreenshotDir() {
     if (fs.existsSync(SCREENSHOT_DIR)) {
         for (const f of fs.readdirSync(SCREENSHOT_DIR)) {
-            if (f.endsWith('.png') || f === 'report.html') fs.unlinkSync(path.join(SCREENSHOT_DIR, f));
+            if (f.endsWith('.png') || f.endsWith('.gif') || f === 'report.html') fs.unlinkSync(path.join(SCREENSHOT_DIR, f));
         }
     } else {
         fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -57,6 +57,118 @@ async function snapPlayers(playerPages, groupLabel, meta = {}) {
     for (let i = 0; i < playerPages.length; i++) {
         await snap(playerPages[i], `player-${PLAYER_NAMES[i]}-${meta.phase || groupLabel}`, {
             ...meta,
+            device: 'phone',
+            playerName: PLAYER_NAMES[i],
+            group: groupLabel,
+        });
+    }
+}
+
+// Capture an animation as a GIF by taking rapid screenshots
+async function snapGif(page, label, meta = {}, durationMs = 1500, fps = 10) {
+    const GIFEncoder = require('gif-encoder-2');
+    const { createCanvas, Image } = (() => {
+        // Use raw PNG buffers — decode with png-js
+        return { createCanvas: null, Image: null };
+    })();
+
+    const frameInterval = Math.floor(1000 / fps);
+    const frameCount = Math.ceil(durationMs / frameInterval);
+    const frames = [];
+
+    // Capture frames
+    for (let i = 0; i < frameCount; i++) {
+        const buf = await page.screenshot({ fullPage: true });
+        frames.push(buf);
+        if (i < frameCount - 1) await page.waitForTimeout(frameInterval);
+    }
+
+    // Get dimensions from first frame
+    const PNG = require('png-js');
+    const firstPng = new PNG(frames[0]);
+    const width = firstPng.width;
+    const height = firstPng.height;
+
+    // Encode GIF
+    const encoder = new GIFEncoder(width, height, 'neuquant', true);
+    encoder.setDelay(frameInterval);
+    encoder.setRepeat(0); // loop forever
+    encoder.setQuality(20);
+    encoder.start();
+
+    for (const frameBuf of frames) {
+        const png = new PNG(frameBuf);
+        const pixels = await new Promise(resolve => png.decode(resolve));
+        encoder.addFrame(pixels);
+    }
+
+    encoder.finish();
+    const gifBuffer = encoder.out.getData();
+
+    screenshotCounter++;
+    const num = String(screenshotCounter).padStart(2, '0');
+    const filename = `${num}-${label}.gif`;
+    fs.writeFileSync(path.join(SCREENSHOT_DIR, filename), gifBuffer);
+
+    reportEntries.push({
+        filename,
+        label,
+        phase: meta.phase || '',
+        narrator: meta.narrator || '',
+        device: meta.device || 'tv',
+        playerName: meta.playerName || '',
+        group: meta.group || label,
+    });
+}
+
+// Capture GIF for all player phones in parallel
+async function snapPlayersGif(playerPages, groupLabel, meta = {}, durationMs = 1500, fps = 10) {
+    const GIFEncoder = require('gif-encoder-2');
+    const PNG = require('png-js');
+    const frameInterval = Math.floor(1000 / fps);
+    const frameCount = Math.ceil(durationMs / frameInterval);
+
+    // Capture frames from all players simultaneously
+    const allFrames = playerPages.map(() => []);
+
+    for (let f = 0; f < frameCount; f++) {
+        const captures = await Promise.all(playerPages.map(p => p.screenshot({ fullPage: true })));
+        captures.forEach((buf, i) => allFrames[i].push(buf));
+        if (f < frameCount - 1) await playerPages[0].waitForTimeout(frameInterval);
+    }
+
+    // Encode GIF for each player
+    for (let i = 0; i < playerPages.length; i++) {
+        const frames = allFrames[i];
+        const firstPng = new PNG(frames[0]);
+        const width = firstPng.width;
+        const height = firstPng.height;
+
+        const encoder = new GIFEncoder(width, height, 'neuquant', true);
+        encoder.setDelay(frameInterval);
+        encoder.setRepeat(0);
+        encoder.setQuality(20);
+        encoder.start();
+
+        for (const frameBuf of frames) {
+            const png = new PNG(frameBuf);
+            const pixels = await new Promise(resolve => png.decode(resolve));
+            encoder.addFrame(pixels);
+        }
+
+        encoder.finish();
+        const gifBuffer = encoder.out.getData();
+
+        screenshotCounter++;
+        const num = String(screenshotCounter).padStart(2, '0');
+        const filename = `${num}-player-${PLAYER_NAMES[i]}-${meta.phase || groupLabel}.gif`;
+        fs.writeFileSync(path.join(SCREENSHOT_DIR, filename), gifBuffer);
+
+        reportEntries.push({
+            filename,
+            label: `player-${PLAYER_NAMES[i]}-${meta.phase || groupLabel}`,
+            phase: meta.phase || '',
+            narrator: meta.narrator || '',
             device: 'phone',
             playerName: PLAYER_NAMES[i],
             group: groupLabel,
@@ -233,11 +345,11 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         await host.waitForTimeout(500);
         await snap(host, 'host-game-started', { phase: 'RoleReveal', device: 'tv' });
 
-        // Role reveal — all players
+        // Role reveal — capture card flip animations as GIFs
         for (let i = 0; i < PLAYER_COUNT; i++) {
             try { await playerPages[i].waitForSelector('#role-screen.active', { timeout: 8000 }); } catch {}
         }
-        await snapPlayers(playerPages, 'players-roles', { phase: 'RoleReveal' });
+        await snapPlayersGif(playerPages, 'players-role-flip', { phase: 'RoleReveal' }, 2000, 8);
 
         // === NIGHT PHASE ===
         try { await host.waitForSelector('#night-view:not(.hidden)', { timeout: 15000 }); } catch {}
@@ -314,7 +426,7 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         // Cleanup
         await browser.close();
 
-        const screenshots = fs.readdirSync(SCREENSHOT_DIR).filter(f => f.endsWith('.png'));
+        const screenshots = fs.readdirSync(SCREENSHOT_DIR).filter(f => f.endsWith('.png') || f.endsWith('.gif'));
         console.log(`\n✅ ${screenshots.length} screenshots saved to ./tmp/`);
         expect(screenshots.length).toBeGreaterThan(15);
         expect(fs.existsSync(path.join(SCREENSHOT_DIR, 'report.html'))).toBe(true);
