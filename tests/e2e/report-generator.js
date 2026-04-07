@@ -30,7 +30,7 @@ function generateReport(reportEntries, screenshotDir) {
             const items = section.items.map(item =>
                 '<div class="carousel-item">' +
                 '<img src="' + item.filename + '" alt="' + item.label + '" loading="lazy">' +
-                '<div class="player-label">\u{1F4F1} ' + item.playerName + '</div>' +
+                '<div class="player-label">\u{1F4F1} ' + item.playerName + '\'s screen</div>' +
                 '</div>'
             ).join('\n');
             content = '<div class="carousel"><div class="carousel-track">' + items + '</div></div>';
@@ -39,7 +39,7 @@ function generateReport(reportEntries, screenshotDir) {
                 const cls = 'single-shot ' + item.device;
                 let label = '';
                 if (item.device === 'phone') {
-                    label = '<div class="player-label">\u{1F4F1} ' + item.playerName + '</div>';
+                    label = '<div class="player-label">\u{1F4F1} ' + item.playerName + '\'s screen</div>';
                 }
                 return '<div class="' + cls + '">' +
                     '<img src="' + item.filename + '" alt="' + item.label + '" loading="lazy">' +

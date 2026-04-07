@@ -260,7 +260,7 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         // === DAY PHASE ===
         await host.waitForTimeout(500);
         await snap(host, 'host-day', { phase: 'Day', device: 'tv', narrator: 'Time to discuss. Who is suspicious?' });
-        await snapPlayers(playerPages.slice(0, 3), 'players-day', { phase: 'Day' });
+        await snapPlayers(playerPages, 'players-day', { phase: 'Day' });
 
         // All alive players click "Ready to Vote"
         for (const p of playerPages) {
@@ -296,7 +296,7 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         }
         await host.waitForTimeout(1000);
         await snap(host, 'host-votes-cast', { phase: 'Voting', device: 'tv', narrator: 'The votes are in.' });
-        await snapPlayers(playerPages.slice(0, 3), 'players-voted', { phase: 'Voting' });
+        await snapPlayers(playerPages, 'players-voted', { phase: 'Voting' });
 
         // Advance through voting/execution narration
         await advanceNarration(host, playerPages, 'execution', 15);
@@ -306,7 +306,7 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         // === FINAL ===
         await host.waitForTimeout(1000);
         await snap(host, 'host-final', { phase: 'Final', device: 'tv' });
-        await snapPlayers(playerPages.slice(0, 3), 'players-final', { phase: 'Final' });
+        await snapPlayers(playerPages, 'players-final', { phase: 'Final' });
 
         // Generate HTML report
         generateReport(reportEntries, SCREENSHOT_DIR);

@@ -886,16 +886,12 @@ function handleRoleRevealStep({ role, description, faction, count }) {
     document.getElementById('reveal-count').textContent =
         count === 1 ? '1 player' : count + ' players';
 
-    // Hide narration overlay, show Next button via narration system
+    // Show Next button inside the reveal view (no narration overlay blur)
     hideNarration();
-    const overlay = document.getElementById('narration-overlay');
-    const nextBtn = document.getElementById('narration-next-btn');
-    overlay.classList.remove('hidden');
-    document.getElementById('narration-text').textContent = '';
-    nextBtn.classList.remove('hidden');
-    nextBtn.onclick = () => {
-        nextBtn.classList.add('hidden');
-        hideNarration();
+    const revealNextBtn = document.getElementById('reveal-next-btn');
+    revealNextBtn.classList.remove('hidden');
+    revealNextBtn.onclick = () => {
+        revealNextBtn.classList.add('hidden');
         ws.send({ type: 'narration_next' });
     };
 }

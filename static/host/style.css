@@ -1538,9 +1538,11 @@ select {
 
 #role-reveal-view {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 60vh;
+    gap: 1rem;
 }
 
 .reveal-card-host {
@@ -1608,6 +1610,17 @@ select {
     color: var(--text-dim);
     font-size: 0.95rem;
     letter-spacing: 0.05em;
+}
+
+.reveal-next-btn {
+    margin-top: 2rem;
+    font-size: 1.5rem;
+    padding: 1rem 3rem;
+    animation: revealNameSlide 0.5s ease-out 0.3s both;
+}
+
+.reveal-next-btn.hidden {
+    display: none;
 }
 
 /* Atmosphere for role_reveal phase */
