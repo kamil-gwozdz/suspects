@@ -111,7 +111,7 @@ body {
 }
 
 #game-screen.phase-night {
-    background: linear-gradient(180deg, #05050d 0%, #0a0a1a 40%, #0d0d25 100%);
+    background: linear-gradient(180deg, #0a0a20 0%, #101030 40%, #151540 100%);
 }
 
 #game-screen.phase-dawn {
@@ -493,11 +493,12 @@ select {
     justify-content: center;
     gap: 2rem;
     padding: 1rem 2rem;
-    background: rgba(20, 20, 31, 0.85);
+    background: rgba(10, 10, 15, 0.95);
     backdrop-filter: blur(8px);
     width: 100%;
     font-size: 2rem;
-    z-index: 2;
+    z-index: 950;
+    position: relative;
     transition: background 1s ease;
 }
 
@@ -703,11 +704,12 @@ select {
 }
 
 .alive-players {
-    background: rgba(20, 20, 31, 0.85);
+    background: rgba(10, 10, 15, 0.95);
     backdrop-filter: blur(8px);
     padding: 1rem 2rem;
     width: 100%;
-    z-index: 2;
+    z-index: 950;
+    position: relative;
     transition: background 0.5s ease;
 }
 
@@ -1377,7 +1379,8 @@ select {
     position: fixed;
     inset: 0;
     z-index: 900;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(12px);
     display: flex;
     flex-direction: column;
     align-items: center;

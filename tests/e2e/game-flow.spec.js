@@ -50,6 +50,45 @@ function waitForWsMessage(page, messageType, timeout = 15000) {
     }, { messageType, timeout });
 }
 
+// Advance narration by clicking Next on host and handling player actions
+// Stops when the target phase is reached on the host screen
+async function advanceNarration(host, playerPages, targetPhase, maxSteps = 40) {
+    for (let step = 0; step < maxSteps; step++) {
+        // Click "Next" on host if visible
+        const nextBtn = host.locator('#narration-next-btn:not(.hidden)');
+        if (await nextBtn.isVisible().catch(() => false)) {
+            await nextBtn.click();
+            await host.waitForTimeout(600);
+        }
+
+        // Handle player night actions — select target + confirm
+        for (const p of playerPages) {
+            try {
+                const nightActive = await p.locator('#night-screen.active').isVisible().catch(() => false);
+                if (nightActive) {
+                    const firstTarget = p.locator('.target-btn').first();
+                    if (await firstTarget.isVisible().catch(() => false)) {
+                        await firstTarget.click();
+                        await p.waitForTimeout(150);
+                    }
+                    const confirmBtn = p.locator('#confirm-action-btn:not([disabled])');
+                    if (await confirmBtn.isVisible().catch(() => false)) {
+                        await confirmBtn.click();
+                        await p.waitForTimeout(200);
+                    }
+                }
+            } catch {}
+        }
+
+        // Check if target phase reached
+        const phaseText = await host.locator('#phase-display').textContent().catch(() => '');
+        if (phaseText && phaseText.toLowerCase().includes(targetPhase.toLowerCase())) {
+            return;
+        }
+        await host.waitForTimeout(400);
+    }
+}
+
 test.describe('Suspects E2E — Full Game Flow', () => {
     test.beforeAll(async () => {
         prepareScreenshotDir();
@@ -199,61 +238,18 @@ test.describe('Suspects E2E — Full Game Flow', () => {
             await snap(playerPages[i], `player-${PLAYER_NAMES[i]}-night`);
         }
 
-        // Handle narration — advance through night narration steps
-        // Click "Next" on host if narration overlay appears
-        for (let step = 0; step < 30; step++) {
-            const nextVisible = await host.locator('#narration-next-btn:not(.hidden)').isVisible().catch(() => false);
-            if (nextVisible) {
-                await host.click('#narration-next-btn');
-                await host.waitForTimeout(800);
-            }
-
-            // Check if any player has night action screen — auto-confirm
-            for (const p of playerPages) {
-                const hasNightAction = await p.locator('#night-screen.active #confirm-action-btn').isVisible().catch(() => false);
-                if (hasNightAction) {
-                    // Try to select first target and confirm
-                    const firstTarget = p.locator('.target-btn').first();
-                    if (await firstTarget.isVisible().catch(() => false)) {
-                        await firstTarget.click();
-                        await p.waitForTimeout(200);
-                    }
-                    const confirmBtn = p.locator('#confirm-action-btn');
-                    if (await confirmBtn.isEnabled()) {
-                        await confirmBtn.click();
-                        await p.waitForTimeout(300);
-                    }
-                }
-                // If player has a "Done" narration ack button visible, click it
-                const doneBtn = p.locator('#narration-ack-btn:not(.hidden)');
-                if (await doneBtn.isVisible().catch(() => false)) {
-                    await doneBtn.click();
-                    await p.waitForTimeout(300);
-                }
-            }
-
-            // Check if we've moved past Night
-            const phaseText = await host.locator('#phase-display').textContent().catch(() => '');
-            if (phaseText && !phaseText.toLowerCase().includes('night') && phaseText !== '') {
-                break;
-            }
-            await host.waitForTimeout(500);
-        }
+        // Advance through all narration until we reach Day phase
+        await advanceNarration(host, playerPages, 'day', 60);
 
         // === DAWN PHASE ===
-        await host.waitForTimeout(1000);
-        await snap(host, 'host-dawn');
+        // Dawn may flash by or we may already be on Day
+        await host.waitForTimeout(500);
+        await snap(host, 'host-dawn-or-day');
 
-        // Advance through dawn narration
-        for (let step = 0; step < 10; step++) {
-            const nextVisible = await host.locator('#narration-next-btn:not(.hidden)').isVisible().catch(() => false);
-            if (nextVisible) {
-                await host.click('#narration-next-btn');
-                await host.waitForTimeout(800);
-            }
-            const phaseText = await host.locator('#phase-display').textContent().catch(() => '');
-            if (phaseText && phaseText.toLowerCase().includes('day')) break;
-            await host.waitForTimeout(500);
+        // Keep advancing if still on Dawn
+        const phaseAfterDawn = await host.locator('#phase-display').textContent().catch(() => '');
+        if (phaseAfterDawn && phaseAfterDawn.toLowerCase().includes('dawn')) {
+            await advanceNarration(host, playerPages, 'day', 20);
         }
 
         // === DAY PHASE ===
@@ -277,40 +273,36 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         await host.waitForTimeout(1000);
 
         // === VOTING PHASE ===
-        // Wait for voting or advance manually
-        try {
-            await host.waitForSelector('#vote-screen.active, #voting-view:not(.hidden)', { timeout: 10000 });
-        } catch {}
+        // Advance narration into voting if needed
+        await advanceNarration(host, playerPages, 'voting', 10);
         await host.waitForTimeout(500);
         await snap(host, 'host-voting');
 
-        // Players vote — each votes for a different target
+        // Players vote — each votes for the first available target
         for (let i = 0; i < playerPages.length; i++) {
             const p = playerPages[i];
             try {
                 await p.waitForSelector('#vote-screen.active', { timeout: 5000 });
-                // Select first available target
+                await p.waitForTimeout(300);
                 const target = p.locator('.vote-target-row').first();
                 if (await target.isVisible().catch(() => false)) {
                     await target.click();
                     await p.waitForTimeout(200);
-                    await p.click('#cast-vote-btn');
+                    const castBtn = p.locator('#cast-vote-btn:not([disabled])');
+                    if (await castBtn.isVisible().catch(() => false)) {
+                        await castBtn.click();
+                    }
                 }
+                if (i === 0) await snap(p, `player-${PLAYER_NAMES[i]}-voting`);
             } catch {}
         }
         await host.waitForTimeout(1000);
         await snap(host, 'host-votes-cast');
-        await snap(playerPages[0], `player-${PLAYER_NAMES[0]}-voted`);
 
-        // Advance through voting narration
-        for (let step = 0; step < 10; step++) {
-            const nextVisible = await host.locator('#narration-next-btn:not(.hidden)').isVisible().catch(() => false);
-            if (nextVisible) {
-                await host.click('#narration-next-btn');
-                await host.waitForTimeout(800);
-            }
-            await host.waitForTimeout(500);
-        }
+        // Advance through voting/execution narration
+        await advanceNarration(host, playerPages, 'execution', 15);
+        await host.waitForTimeout(500);
+        await snap(host, 'host-execution');
 
         // === FINAL SCREENSHOTS ===
         await host.waitForTimeout(1000);

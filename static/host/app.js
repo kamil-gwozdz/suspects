@@ -78,6 +78,13 @@ ws.onMessage((msg) => {
         case 'auto_start_cancelled':
             handleAutoStartCancelled();
             break;
+        case 'all_ready_to_vote':
+            // All alive players are ready — advance from Day to Voting
+            ws.send({ type: 'advance_phase' });
+            break;
+        case 'ready_to_vote_update':
+            // Could show ready indicators — for now just ignore
+            break;
         case 'phase_changed':
             handlePhaseChanged(msg.payload);
             break;
@@ -378,9 +385,13 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
     document.getElementById('phase-display').textContent = formatPhase(phase);
 
     // Play transition overlay then finalize atmosphere
-    playPhaseTransition(phase).then(() => {
-        setPhaseAtmosphere(phase);
-    });
+    // Skip transition overlay during narrated phases (narration IS the transition)
+    const narratedPhases = ['night', 'dawn', 'voting'];
+    if (!narratedPhases.includes(phase)) {
+        playPhaseTransition(phase).then(() => {
+            setPhaseAtmosphere(phase);
+        });
+    }
 
     // Set atmosphere immediately (overlay is cosmetic)
     setPhaseAtmosphere(phase);
