@@ -8,19 +8,19 @@ One screen (TV or computer) displays the main game board. Players join from thei
 
 <p align="center">
   <img src="docs/screenshots/host-lobby.png" alt="Host lobby screen" width="700">
-  <br><em>Host lobby — create a room, share the QR code</em>
+  <br><em>Host lobby — round table with players, QR code, countdown to game start</em>
 </p>
 
 <p align="center">
   <img src="docs/screenshots/host-night.png" alt="Night phase" width="700">
-  <br><em>Night phase — atmospheric view with stars, moon, and alive player tracker</em>
+  <br><em>Night phase — the Mafia wakes up to choose their victim</em>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/player-join.png" alt="Player join screen" width="300">
-  &nbsp;&nbsp;&nbsp;
-  <img src="docs/screenshots/player-role.png" alt="Player role card" width="300">
-  <br><em>Player screens — join on your phone, receive your secret role</em>
+  <img src="docs/screenshots/player-join.png" alt="Player join screen" width="250">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/screenshots/player-role.png" alt="Player role card" width="250">
+  <br><em>Player screens — join from your phone, receive your secret role</em>
 </p>
 
 ## Features

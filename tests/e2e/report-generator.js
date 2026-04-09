@@ -69,9 +69,9 @@ function generateReport(reportEntries, screenshotDir) {
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: #0a0a0f; color: #e0e0e0; font-family: 'Inter', system-ui, sans-serif; padding: 2rem; }
 h1 { text-align: center; font-size: 2.5rem; color: #e74c3c; letter-spacing: 0.2em; margin-bottom: 0.5rem; }
-.subtitle { text-align: center; color: #888; margin-bottom: 3rem; }
-.section { margin-bottom: 3rem; border-bottom: 1px solid #222; padding-bottom: 2rem; position: relative; }
-.section-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.subtitle { text-align: center; color: #888; margin-bottom: 2rem; }
+.section { margin-bottom: 1.5rem; border-bottom: 1px solid #222; padding-bottom: 1.5rem; position: relative; }
+.section-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
 .phase-badge { background: #e74c3c; color: white; padding: 0.3rem 1rem; border-radius: 20px; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
 .step-badge { background: #333; color: #fff; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .narrator-text { color: #f1c40f; font-style: italic; font-size: 1.1rem; }
@@ -84,13 +84,13 @@ h1 { text-align: center; font-size: 2.5rem; color: #e74c3c; letter-spacing: 0.2e
 .single-shot.tv img { max-width: 900px; }
 .single-shot.phone img { max-width: 300px; }
 .carousel { position: relative; overflow: hidden; }
-.carousel-track { display: flex; gap: 1rem; overflow-x: auto; scroll-snap-type: x mandatory; padding: 1rem 0;
+.carousel-track { display: flex; gap: 0.75rem; overflow-x: auto; scroll-snap-type: x mandatory; padding: 0.5rem 0;
     scrollbar-width: thin; scrollbar-color: #e74c3c #1a1a2e; }
 .carousel-track::-webkit-scrollbar { height: 8px; }
 .carousel-track::-webkit-scrollbar-track { background: #1a1a2e; border-radius: 4px; }
 .carousel-track::-webkit-scrollbar-thumb { background: #e74c3c; border-radius: 4px; }
 .carousel-item { flex: 0 0 auto; scroll-snap-align: start; text-align: center; }
-.carousel-item img { height: 500px; width: auto; border-radius: 12px; border: 2px solid #333; transition: border-color 0.2s; }
+.carousel-item img { width: 195px; height: 422px; object-fit: cover; object-position: top; border-radius: 12px; border: 2px solid #333; transition: border-color 0.2s; }
 .carousel-item img:hover { border-color: #e74c3c; }
 .carousel-item .player-label { margin-top: 0.5rem; color: #aaa; font-size: 0.9rem; font-weight: 600; }
 .player-label { margin-top: 0.5rem; color: #aaa; font-size: 0.9rem; font-weight: 600; text-align: center; }

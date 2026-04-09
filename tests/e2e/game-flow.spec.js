@@ -324,40 +324,32 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         await host.waitForSelector('#game-screen.active', { timeout: 15000 });
         await snap(host, 'host-game-started', { phase: 'RoleReveal', device: 'tv' });
 
-        // Role reveal — advance through ALL reveals to Night, then replay flip for GIFs
+        // Role reveal — wait for role screen, capture card backs
         for (let i = 0; i < PLAYER_COUNT; i++) {
             try { await playerPages[i].waitForSelector('#role-screen.active', { timeout: 8000 }); } catch {}
         }
+        await snapPlayers(playerPages, 'players-role-card-back', { phase: 'RoleReveal' });
 
         // Advance through all role reveals to Night
         await advanceNarration(host, playerPages, 'night', 30);
 
-        // Temporarily restore role screen on each player for PNG before/after capture
+        // Capture role cards (players now know their roles — show the flipped card)
         await Promise.all(playerPages.map(p =>
             p.evaluate(() => {
+                // Force show role screen with card flipped to reveal role
+                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
                 document.getElementById('role-screen').classList.add('active');
-                document.getElementById('sleeping-screen').classList.remove('active');
-                document.getElementById('flip-card').classList.remove('flipped');
+                const flipCard = document.getElementById('flip-card');
+                flipCard.classList.add('flipped');
             })
         ));
-        await playerPages[0].waitForTimeout(200);
+        await playerPages[0].waitForTimeout(400);
+        await snapPlayers(playerPages, 'players-role-revealed', { phase: 'RoleReveal' });
 
-        // Capture "before flip" PNGs
-        await snapPlayers(playerPages, 'players-role-before-flip', { phase: 'RoleReveal' });
-
-        // Trigger flip on all phones and wait for animation
-        await Promise.all(playerPages.map(p =>
-            p.evaluate(() => document.getElementById('flip-card').classList.add('flipped'))
-        ));
-        await playerPages[0].waitForTimeout(800);
-
-        // Capture "after flip" PNGs
-        await snapPlayers(playerPages, 'players-role-after-flip', { phase: 'RoleReveal' });
-
-        // Restore night/sleeping screen
+        // Restore sleeping screen (night phase)
         await Promise.all(playerPages.map(p =>
             p.evaluate(() => {
-                document.getElementById('role-screen').classList.remove('active');
+                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
                 document.getElementById('sleeping-screen').classList.add('active');
             })
         ));
@@ -561,42 +553,44 @@ test.describe('Suspects E2E — Full Game Flow', () => {
             const voteTarget = aliveMafia.length > 0 ? aliveMafia[0] : [...aliveSet][0];
             console.log(`  Vote target: ${voteTarget}`);
 
+            // Vote ALL alive players in parallel — avoid sequential timeouts exceeding vote timer
+            const votePromises = [];
             for (let i = 0; i < PLAYER_COUNT; i++) {
                 if (!aliveSet.has(PLAYER_NAMES[i])) continue;
                 const p = playerPages[i];
-                try {
-                    await p.waitForSelector('#vote-screen.active', { timeout: 8000 });
-                    await p.waitForTimeout(500); // let vote targets render
+                const name = PLAYER_NAMES[i];
+                votePromises.push((async () => {
+                    try {
+                        await p.waitForSelector('#vote-screen.active', { timeout: 8000 });
+                        await p.waitForTimeout(300);
 
-                    // Check how many vote target rows exist
-                    const rowCount = await p.locator('.vote-target-row').count().catch(() => 0);
-                    if (rowCount === 0) {
-                        console.log(`  ${PLAYER_NAMES[i]}: no vote targets, skipping`);
-                        continue;
-                    }
+                        // Use evaluate to vote directly — bypasses Playwright visibility checks
+                        const voted = await p.evaluate((targetName) => {
+                            const rows = document.querySelectorAll('.vote-target-row');
+                            if (rows.length === 0) return false;
 
-                    // Select vote target by name, fallback to first row
-                    const targetRow = p.locator(`.vote-target-row:has-text("${voteTarget}")`);
-                    if (await targetRow.count() > 0 && await targetRow.first().isVisible().catch(() => false)) {
-                        await targetRow.first().click();
-                    } else {
-                        await p.locator('.vote-target-row').first().click();
-                    }
-                    await p.waitForTimeout(200);
+                            let targetRow = null;
+                            for (const row of rows) {
+                                if (row.textContent.includes(targetName)) { targetRow = row; break; }
+                            }
+                            if (!targetRow) targetRow = rows[0];
 
-                    // Click cast vote button (should be enabled after selecting target)
-                    const castBtn = p.locator('#cast-vote-btn');
-                    if (await castBtn.isEnabled().catch(() => false)) {
-                        await castBtn.click({ timeout: 2000 });
-                    } else {
-                        console.log(`  ${PLAYER_NAMES[i]}: cast-vote-btn still disabled`);
+                            targetRow.click();
+                            setTimeout(() => {
+                                const castBtn = document.getElementById('cast-vote-btn');
+                                if (castBtn && !castBtn.disabled) castBtn.click();
+                            }, 100);
+                            return true;
+                        }, voteTarget);
+
+                        if (!voted) console.log(`  ${name}: no vote targets found`);
+                    } catch (e) {
+                        console.log(`  Vote failed for ${name}: ${e.message?.split('\n')[0]}`);
                     }
-                } catch (e) {
-                    console.log(`  Vote failed for ${PLAYER_NAMES[i]}: ${e.message}`);
-                }
+                })());
             }
-
-            await host.waitForTimeout(1500);
+            await Promise.all(votePromises);
+            await host.waitForTimeout(500);
             await snap(host, `host-votes-cast-r${round}`, { phase: 'Voting', device: 'tv' });
             await snapAlivePlayers(playerPages, `players-voted-r${round}`, aliveSet, { phase: 'Voting' });
 
