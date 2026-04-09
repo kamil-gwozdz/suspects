@@ -786,7 +786,7 @@ function showDeathOverlay() {
             overlay.classList.add('death-overlay-fade-out');
             setTimeout(() => overlay.remove(), 600);
         }
-    }, 4000);
+    }, 2000);
 }
 
 function showSpectatorBanner() {
