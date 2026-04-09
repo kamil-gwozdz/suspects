@@ -353,10 +353,11 @@ function renderRoundTable() {
         const y = Math.sin(rad) * radius;
 
         const isReady = playerReadyState[p.id] || false;
+        const isDead = alivePlayers.length > 0 && alivePlayers.some(ap => ap.id === p.id && ap.alive === false);
         const initials = (p.name || '?').charAt(0).toUpperCase();
 
         const seat = document.createElement('div');
-        seat.className = `table-seat ${isReady ? 'ready' : 'not-ready'}`;
+        seat.className = `table-seat ${isDead ? 'dead' : (isReady ? 'ready' : 'not-ready')}`;
         seat.dataset.playerId = p.id;
         const transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
         seat.style.setProperty('--seat-transform', transform);
@@ -364,9 +365,9 @@ function renderRoundTable() {
         seat.style.animationDelay = `${i * 0.05}s`;
 
         seat.innerHTML = `
-            <div class="seat-avatar">${escapeHtml(initials)}</div>
+            <div class="seat-avatar">${isDead ? '☠️' : escapeHtml(initials)}</div>
             <span class="seat-name">${escapeHtml(p.name)}</span>
-            <span class="seat-status">${isReady ? '✓' : '●'}</span>
+            <span class="seat-status">${isDead ? '' : (isReady ? '✓' : '●')}</span>
         `;
 
         table.appendChild(seat);
@@ -387,7 +388,8 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
         gameScreen.classList.add('active');
     }
 
-    document.getElementById('round-number').textContent = round;
+    // Don't show "Round 0" during role_reveal; display round number only for in-game phases
+    document.getElementById('round-number').textContent = (phase === 'role_reveal' || phase === 'lobby') ? '' : round;
     document.getElementById('phase-display').textContent = formatPhase(phase);
 
     // Play transition overlay then finalize atmosphere
@@ -416,12 +418,15 @@ function handlePhaseChanged({ phase, round, timer_secs }) {
     const viewId = viewMap[phase];
     if (viewId) document.getElementById(viewId).classList.remove('hidden');
 
-    // Reset vote state when entering voting phase
+    // Reset vote state when entering voting phase and show initial bars
     if (phase === 'voting') {
         previousVoteCounts = {};
         document.getElementById('vote-bars').innerHTML = '';
         const counter = document.getElementById('votes-cast-counter');
         if (counter) counter.textContent = '';
+        // Initialize vote bars with 0 votes for all alive players
+        const candidates = alivePlayers.length > 0 ? alivePlayers.filter(p => p.alive !== false) : players;
+        handleVoteUpdate({ votes: candidates.map(p => ({ voter_id: p.id, voter_name: p.name, target_id: null })) });
     }
 
     // Hide mini-game overlay when phase changes
@@ -609,6 +614,7 @@ function handleAlivePlayerList({ players: aliveList }) {
     const previouslyAlive = new Set(alivePlayers.filter(p => p.alive).map(p => p.id));
     alivePlayers = aliveList;
     updateAliveListUI(previouslyAlive);
+    renderRoundTable();
 }
 
 function updateAliveListUI(previouslyAlive) {
@@ -641,6 +647,17 @@ function markPlayerDead(playerId) {
     if (li && !li.classList.contains('dead')) {
         li.className = 'just-died';
         setTimeout(() => { li.className = 'dead'; }, 1000);
+    }
+
+    // Also mark the round-table seat as dead
+    const seat = document.querySelector(`.table-seat[data-player-id="${playerId}"]`);
+    if (seat && !seat.classList.contains('dead')) {
+        seat.classList.remove('ready', 'not-ready');
+        seat.classList.add('dead');
+        const avatar = seat.querySelector('.seat-avatar');
+        if (avatar) avatar.textContent = '☠️';
+        const status = seat.querySelector('.seat-status');
+        if (status) status.textContent = '';
     }
 }
 

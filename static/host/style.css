@@ -353,6 +353,24 @@ select {
     animation: seatRemove 0.3s ease forwards;
 }
 
+/* Dead player seat */
+.table-seat.dead {
+    opacity: 0.35;
+    filter: grayscale(1);
+    animation: seatAppear 0.5s cubic-bezier(.34,1.56,.64,1) forwards;
+}
+.table-seat.dead .seat-avatar {
+    background: rgba(80, 20, 20, 0.4);
+    border-color: rgba(139, 0, 0, 0.5);
+    color: #aaa;
+    font-size: clamp(0.9rem, 1.3vw, 1.5rem);
+    box-shadow: none;
+}
+.table-seat.dead .seat-name {
+    color: rgba(200, 200, 200, 0.4);
+    text-decoration: line-through;
+}
+
 .seat-avatar {
     width: clamp(28px, 3vw, 48px);
     height: clamp(28px, 3vw, 48px);

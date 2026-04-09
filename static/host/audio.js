@@ -46,7 +46,7 @@ class AudioManager {
 
     // Play a narration line by key. Returns a Promise that resolves when done.
     async play(key) {
-        if (!this.has(key)) return;             // graceful text-only fallback
+        if (!this.has(key)) return Promise.resolve(); // graceful text-only fallback
 
         // Stop anything currently playing
         await this._fadeOut();
