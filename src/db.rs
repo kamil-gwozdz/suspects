@@ -238,6 +238,7 @@ pub async fn save_game_event(
 }
 
 /// Mark a game as completed (game_over phase).
+#[allow(dead_code)]
 pub async fn mark_game_completed(pool: &SqlitePool, game_id: &str) {
     let res = sqlx::query(
         "UPDATE games SET phase = 'game_over', updated_at = CURRENT_TIMESTAMP WHERE id = ?1",

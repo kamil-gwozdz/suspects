@@ -48,6 +48,7 @@ pub struct Room {
     pub host_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
     pub votes: HashMap<String, Option<String>>,
     pub night_actions: Vec<crate::game::phases::NightAction>,
+    #[allow(dead_code)]
     pub created_at: Instant,
     /// When the host disconnected; `None` if host is connected.
     pub host_disconnected_at: Option<Instant>,
@@ -140,6 +141,7 @@ impl Room {
 
     /// Remove a player by ID. Only allowed during Lobby phase.
     /// Returns the removed player's name if successful.
+    #[allow(dead_code)]
     pub fn remove_player(&mut self, id: &str) -> Option<String> {
         if self.game_state.phase != GamePhase::Lobby {
             return None;
@@ -290,9 +292,20 @@ impl AppState {
     }
 
     pub async fn create_room(&self, language: String) -> String {
+        let mut rooms = self.rooms.write().await;
+        // Retry up to 10 times to avoid room code collisions
+        for _ in 0..10 {
+            let room = Room::new(language.clone());
+            let code = room.code.clone();
+            if !rooms.contains_key(&code) {
+                rooms.insert(code.clone(), Arc::new(Mutex::new(room)));
+                return code;
+            }
+        }
+        // Extremely unlikely: 10 collisions in a row. Force-insert the last attempt.
         let room = Room::new(language);
         let code = room.code.clone();
-        let mut rooms = self.rooms.write().await;
+        tracing::warn!(room_code = %code, "room code collision after 10 attempts, overwriting");
         rooms.insert(code.clone(), Arc::new(Mutex::new(room)));
         code
     }

@@ -4,6 +4,7 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     pub database_url: String,
+    #[allow(dead_code)]
     pub base_url: String,
 }
 

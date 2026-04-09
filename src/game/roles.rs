@@ -61,7 +61,12 @@ impl Role {
     pub fn has_night_action(&self) -> bool {
         !matches!(
             self,
-            Role::Civilian | Role::Mayor | Role::Jester | Role::Survivor
+            Role::Civilian
+                | Role::Mayor
+                | Role::Jester
+                | Role::Survivor
+                | Role::Spy
+                | Role::Executioner
         )
     }
 

@@ -13,6 +13,7 @@ pub enum Winner {
 }
 
 pub struct PlayerState {
+    #[allow(dead_code)]
     pub id: String,
     pub role: Role,
     pub alive: bool,
@@ -21,6 +22,11 @@ pub struct PlayerState {
 /// Check win conditions. Returns Some(Winner) if the game is over.
 pub fn check_win(players: &[PlayerState]) -> Option<Winner> {
     let alive: Vec<&PlayerState> = players.iter().filter(|p| p.alive).collect();
+
+    // If no players are alive at all, it's a draw
+    if alive.is_empty() {
+        return Some(Winner::Draw);
+    }
 
     let town_alive = alive
         .iter()
@@ -135,5 +141,21 @@ mod tests {
             p("3", Role::Mafioso, false),
         ];
         assert_eq!(check_win(&players), Some(Winner::SerialKiller));
+    }
+
+    #[test]
+    fn test_draw_when_all_dead() {
+        let players = vec![
+            p("1", Role::Civilian, false),
+            p("2", Role::Mafioso, false),
+            p("3", Role::Doctor, false),
+        ];
+        assert_eq!(check_win(&players), Some(Winner::Draw));
+    }
+
+    #[test]
+    fn test_draw_empty_board() {
+        let players: Vec<PlayerState> = vec![];
+        assert_eq!(check_win(&players), Some(Winner::Draw));
     }
 }

@@ -831,3 +831,124 @@ body {
     width: 100%;
     max-width: 300px;
 }
+
+/* ====== Dawn screen ====== */
+
+#dawn-screen {
+    background: linear-gradient(180deg, #0a0a1f 0%, #1a1030 50%, #2a1535 100%);
+}
+
+.dawn-sun {
+    font-size: 5rem;
+    animation: sunRise 2s ease-out forwards;
+}
+
+@keyframes sunRise {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.dawn-text {
+    color: #f0c040;
+    font-size: 1.3rem;
+    letter-spacing: 0.1em;
+    text-align: center;
+}
+
+/* ====== Execution screen ====== */
+
+#execution-screen {
+    background: linear-gradient(180deg, #0a0005 0%, #1a0a0f 100%);
+}
+
+.execution-icon {
+    font-size: 5rem;
+    animation: executionPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes executionPulse {
+    0%, 100% { opacity: 0.7; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.1); }
+}
+
+.execution-name {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    text-shadow: 0 0 20px rgba(231, 76, 60, 0.5);
+}
+
+.execution-message {
+    color: #ccc;
+    font-size: 1.1rem;
+    text-align: center;
+}
+
+/* ====== Death overlay ====== */
+
+#death-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    z-index: 500;
+    animation: deathFadeIn 0.8s ease-out;
+}
+
+#death-overlay.death-overlay-fade-out {
+    opacity: 0;
+    transition: opacity 0.6s ease-out;
+}
+
+@keyframes deathFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.death-skull {
+    font-size: 6rem;
+    animation: skullPulse 2s ease-in-out infinite;
+}
+
+@keyframes skullPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.death-text {
+    color: var(--accent);
+    font-size: 1.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    text-align: center;
+}
+
+.death-subtext {
+    color: var(--text-dim);
+    font-size: 1rem;
+}
+
+/* ====== Spectator mode banner ====== */
+
+#spectator-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: rgba(231, 76, 60, 0.85);
+    color: white;
+    text-align: center;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    z-index: 200;
+    backdrop-filter: blur(4px);
+}

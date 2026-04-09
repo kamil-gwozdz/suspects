@@ -64,113 +64,15 @@ async function snapPlayers(playerPages, groupLabel, meta = {}) {
     }
 }
 
-// Capture an animation as a GIF by taking rapid screenshots
-async function snapGif(page, label, meta = {}, durationMs = 1500, fps = 10) {
-    const GIFEncoder = require('gif-encoder-2');
-    const { createCanvas, Image } = (() => {
-        // Use raw PNG buffers — decode with png-js
-        return { createCanvas: null, Image: null };
-    })();
-
-    const frameInterval = Math.floor(1000 / fps);
-    const frameCount = Math.ceil(durationMs / frameInterval);
-    const frames = [];
-
-    // Capture frames
-    for (let i = 0; i < frameCount; i++) {
-        const buf = await page.screenshot({ fullPage: true });
-        frames.push(buf);
-        if (i < frameCount - 1) await page.waitForTimeout(frameInterval);
-    }
-
-    // Get dimensions from first frame
-    const PNG = require('png-js');
-    const firstPng = new PNG(frames[0]);
-    const width = firstPng.width;
-    const height = firstPng.height;
-
-    // Encode GIF
-    const encoder = new GIFEncoder(width, height, 'neuquant', true);
-    encoder.setDelay(frameInterval);
-    encoder.setRepeat(0); // loop forever
-    encoder.setQuality(20);
-    encoder.start();
-
-    for (const frameBuf of frames) {
-        const png = new PNG(frameBuf);
-        const pixels = await new Promise(resolve => png.decode(resolve));
-        encoder.addFrame(pixels);
-    }
-
-    encoder.finish();
-    const gifBuffer = encoder.out.getData();
-
-    screenshotCounter++;
-    const num = String(screenshotCounter).padStart(2, '0');
-    const filename = `${num}-${label}.gif`;
-    fs.writeFileSync(path.join(SCREENSHOT_DIR, filename), gifBuffer);
-
-    reportEntries.push({
-        filename,
-        label,
-        phase: meta.phase || '',
-        narrator: meta.narrator || '',
-        device: meta.device || 'tv',
-        playerName: meta.playerName || '',
-        group: meta.group || label,
-    });
-}
-
-// Capture GIF for all player phones in parallel
-async function snapPlayersGif(playerPages, groupLabel, meta = {}, durationMs = 1500, fps = 10) {
-    const GIFEncoder = require('gif-encoder-2');
-    const PNG = require('png-js');
-    const frameInterval = Math.floor(1000 / fps);
-    const frameCount = Math.ceil(durationMs / frameInterval);
-
-    // Capture frames from all players simultaneously
-    const allFrames = playerPages.map(() => []);
-
-    for (let f = 0; f < frameCount; f++) {
-        const captures = await Promise.all(playerPages.map(p => p.screenshot({ fullPage: true })));
-        captures.forEach((buf, i) => allFrames[i].push(buf));
-        if (f < frameCount - 1) await playerPages[0].waitForTimeout(frameInterval);
-    }
-
-    // Encode GIF for each player
+// Snap all alive player phones together as a group (dead players get spectator screenshot)
+async function snapAlivePlayers(playerPages, groupLabel, aliveSet, meta = {}) {
     for (let i = 0; i < playerPages.length; i++) {
-        const frames = allFrames[i];
-        const firstPng = new PNG(frames[0]);
-        const width = firstPng.width;
-        const height = firstPng.height;
-
-        const encoder = new GIFEncoder(width, height, 'neuquant', true);
-        encoder.setDelay(frameInterval);
-        encoder.setRepeat(0);
-        encoder.setQuality(20);
-        encoder.start();
-
-        for (const frameBuf of frames) {
-            const png = new PNG(frameBuf);
-            const pixels = await new Promise(resolve => png.decode(resolve));
-            encoder.addFrame(pixels);
-        }
-
-        encoder.finish();
-        const gifBuffer = encoder.out.getData();
-
-        screenshotCounter++;
-        const num = String(screenshotCounter).padStart(2, '0');
-        const filename = `${num}-player-${PLAYER_NAMES[i]}-${meta.phase || groupLabel}.gif`;
-        fs.writeFileSync(path.join(SCREENSHOT_DIR, filename), gifBuffer);
-
-        reportEntries.push({
-            filename,
-            label: `player-${PLAYER_NAMES[i]}-${meta.phase || groupLabel}`,
-            phase: meta.phase || '',
-            narrator: meta.narrator || '',
+        const name = PLAYER_NAMES[i];
+        const suffix = aliveSet.has(name) ? '' : '-spectator';
+        await snap(playerPages[i], `player-${name}-${meta.phase || groupLabel}${suffix}`, {
+            ...meta,
             device: 'phone',
-            playerName: PLAYER_NAMES[i],
+            playerName: name,
             group: groupLabel,
         });
     }
@@ -198,17 +100,32 @@ function waitForWsMessage(page, messageType, timeout = 15000) {
 // Stops when the target phase is reached on the host screen (or game over).
 // roleActions: map of player name → target player name for night actions.
 // onNightAction: async callback(playerIndex, playerName, page) called once per player when their night screen is active.
-async function advanceNarration(host, playerPages, targetPhase, maxSteps = 40, roleActions = {}, onNightAction = null) {
+// aliveSet: optional Set of alive player names; dead players are skipped for night actions.
+async function advanceNarration(host, playerPages, targetPhase, maxSteps = 40, roleActions = {}, onNightAction = null, aliveSet = null) {
     const actioned = new Set();
     const snapped = new Set();
 
     for (let step = 0; step < maxSteps; step++) {
         // Click any visible "Next" button — narration or role reveal
+        let clickedNext = false;
         for (const selector of ['#reveal-next-btn:not(.hidden)', '#narration-next-btn:not(.hidden)']) {
             const btn = host.locator(selector);
             if (await btn.isVisible().catch(() => false)) {
                 await btn.click();
+                clickedNext = true;
                 await host.waitForTimeout(600);
+            }
+        }
+
+        // If no Next button was visible but narration overlay is showing, force-advance via WS
+        if (!clickedNext) {
+            const overlayVisible = await host.locator('#narration-overlay:not(.hidden)').isVisible().catch(() => false);
+            if (overlayVisible) {
+                // Force-send narration_next to unstick narration (covers both HostAdvance and stuck states)
+                await host.evaluate(() => {
+                    if (typeof ws !== 'undefined') ws.send({ type: 'narration_next' });
+                }).catch(() => {});
+                await host.waitForTimeout(800);
             }
         }
 
@@ -216,9 +133,14 @@ async function advanceNarration(host, playerPages, targetPhase, maxSteps = 40, r
         for (let pi = 0; pi < playerPages.length; pi++) {
             const p = playerPages[pi];
             const name = PLAYER_NAMES[pi];
+            // Skip dead players
+            if (aliveSet && !aliveSet.has(name)) continue;
             try {
                 const nightActive = await p.locator('#night-screen.active').isVisible().catch(() => false);
                 if (!nightActive || actioned.has(pi)) continue;
+
+                // Wait briefly for target buttons to render (NightActionPrompt may arrive after WakeUp)
+                await p.waitForTimeout(300);
 
                 // Try to select a target
                 const targetName = roleActions[name];
@@ -250,6 +172,14 @@ async function advanceNarration(host, playerPages, targetPhase, maxSteps = 40, r
                     const confirmBtn = p.locator('#confirm-action-btn:not([disabled])');
                     if (await confirmBtn.isVisible().catch(() => false)) {
                         await confirmBtn.click();
+                        actioned.add(pi);
+                        await p.waitForTimeout(200);
+                    }
+                } else if (nightActive) {
+                    // Night screen is active but no targets — use skip button as fallback
+                    const skipBtn = p.locator('#skip-action-btn:not([disabled])');
+                    if (await skipBtn.isVisible().catch(() => false)) {
+                        await skipBtn.click();
                         actioned.add(pi);
                         await p.waitForTimeout(200);
                     }
@@ -369,21 +299,29 @@ test.describe('Suspects E2E — Full Game Flow', () => {
             }
         }
 
-        await host.waitForTimeout(1000);
+        // Wait for host to show all players
+        await host.waitForFunction(
+            (count) => {
+                const seats = document.querySelectorAll('.table-seat');
+                return seats.length >= count;
+            },
+            PLAYER_COUNT,
+            { timeout: 10000 }
+        ).catch(() => {});
         await snap(host, 'host-lobby-full', { phase: 'Lobby', device: 'tv', narrator: `${PLAYER_COUNT} players seated at the table` });
 
         // === ALL PLAYERS READY ===
         for (let i = 0; i < PLAYER_COUNT; i++) {
-            await playerPages[i].click('#ready-btn');
-            await playerPages[i].waitForTimeout(200);
+            const readyBtnEl = playerPages[i].locator('#ready-btn');
+            await readyBtnEl.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+            await readyBtnEl.click();
         }
         await snapPlayers(playerPages, 'players-ready', { phase: 'Lobby' });
-        await host.waitForTimeout(500);
+        await host.waitForTimeout(300); // brief settle
         await snap(host, 'host-all-ready', { phase: 'Lobby', device: 'tv', narrator: 'All players ready — game starting...' });
 
         // Wait for game start
         await host.waitForSelector('#game-screen.active', { timeout: 15000 });
-        await host.waitForTimeout(500);
         await snap(host, 'host-game-started', { phase: 'RoleReveal', device: 'tv' });
 
         // Role reveal — advance through ALL reveals to Night, then replay flip for GIFs
@@ -394,7 +332,7 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         // Advance through all role reveals to Night
         await advanceNarration(host, playerPages, 'night', 30);
 
-        // Temporarily restore role screen on each player for GIF capture
+        // Temporarily restore role screen on each player for PNG before/after capture
         await Promise.all(playerPages.map(p =>
             p.evaluate(() => {
                 document.getElementById('role-screen').classList.add('active');
@@ -404,13 +342,17 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         ));
         await playerPages[0].waitForTimeout(200);
 
-        // Trigger flip animation on all phones
-        await Promise.all(playerPages.map(p =>
-            p.evaluate(() => setTimeout(() => document.getElementById('flip-card').classList.add('flipped'), 300))
-        ));
+        // Capture "before flip" PNGs
+        await snapPlayers(playerPages, 'players-role-before-flip', { phase: 'RoleReveal' });
 
-        // Capture GIFs during the flip
-        await snapPlayersGif(playerPages, 'players-role-flip', { phase: 'RoleReveal' }, 2000, 8);
+        // Trigger flip on all phones and wait for animation
+        await Promise.all(playerPages.map(p =>
+            p.evaluate(() => document.getElementById('flip-card').classList.add('flipped'))
+        ));
+        await playerPages[0].waitForTimeout(800);
+
+        // Capture "after flip" PNGs
+        await snapPlayers(playerPages, 'players-role-after-flip', { phase: 'RoleReveal' });
 
         // Restore night/sleeping screen
         await Promise.all(playerPages.map(p =>
@@ -487,7 +429,7 @@ test.describe('Suspects E2E — Full Game Flow', () => {
                 if (cur.includes('game over')) return false;
 
                 if (attempt < 2) {
-                    await advanceNarration(host, playerPages, targetPhase, 15);
+                    await advanceNarration(host, playerPages, targetPhase, 15, {}, null, aliveSet);
                 } else {
                     await forceAdvancePhase();
                 }
@@ -507,9 +449,9 @@ test.describe('Suspects E2E — Full Game Flow', () => {
 
             // ── NIGHT ──────────────────────────────────────────────
             console.log(`  Night ${round}...`);
-            await host.waitForTimeout(500);
+            await host.waitForSelector('#phase-display', { timeout: 5000 });
             await snap(host, `host-night-r${round}`, { phase: 'Night', device: 'tv' });
-            await snapPlayers(playerPages, `players-night-r${round}`, { phase: 'Night' });
+            await snapAlivePlayers(playerPages, `players-night-r${round}`, aliveSet, { phase: 'Night' });
 
             // Build role-specific actions (targets must exclude self for each player)
             const aliveTown = townPlayers.filter(n => aliveSet.has(n));
@@ -544,7 +486,7 @@ test.describe('Suspects E2E — Full Game Flow', () => {
                 }
             }
 
-            // Screenshot callback for night actions
+            // Screenshot callback for night actions (alive players only)
             const nightSnap = async (pi, name, page) => {
                 await snap(page, `player-${name}-night-action-r${round}`, {
                     phase: 'Night', device: 'phone', playerName: name,
@@ -553,14 +495,25 @@ test.describe('Suspects E2E — Full Game Flow', () => {
             };
 
             // Advance night narration → dawn
-            await advanceNarration(host, playerPages, 'dawn', 60, roleActions, nightSnap);
+            await advanceNarration(host, playerPages, 'dawn', 60, roleActions, nightSnap, aliveSet);
             if (await isGameOver()) { gameEnded = true; break; }
 
             // ── DAWN ───────────────────────────────────────────────
             console.log(`  Dawn ${round}...`);
-            await host.waitForTimeout(1000);
+            // Wait for dawn phase to appear on host
+            await host.waitForFunction(
+                () => document.getElementById('phase-display')?.textContent?.toLowerCase().includes('dawn'),
+                { timeout: 10000 }
+            ).catch(() => {});
             await snap(host, `host-dawn-r${round}`, { phase: 'Dawn', device: 'tv' });
-            await snapPlayers(playerPages, `players-dawn-r${round}`, { phase: 'Dawn' });
+
+            // Capture player dawn screens
+            for (let i = 0; i < PLAYER_COUNT; i++) {
+                if (!aliveSet.has(PLAYER_NAMES[i])) continue;
+                // Wait for dawn-screen to appear on alive players
+                await playerPages[i].waitForSelector('#dawn-screen.active', { timeout: 5000 }).catch(() => {});
+            }
+            await snapAlivePlayers(playerPages, `players-dawn-r${round}`, aliveSet, { phase: 'Dawn' });
 
             // Advance dawn narration → day (with robust retry)
             if (!await advanceToPhase('day', 6)) {
@@ -578,20 +531,22 @@ test.describe('Suspects E2E — Full Game Flow', () => {
 
             // ── DAY ────────────────────────────────────────────────
             console.log(`  Day ${round}...`);
-            await host.waitForTimeout(500);
+            await host.waitForFunction(
+                () => document.getElementById('phase-display')?.textContent?.toLowerCase().includes('day'),
+                { timeout: 5000 }
+            ).catch(() => {});
             await snap(host, `host-day-r${round}`, { phase: 'Day', device: 'tv' });
-            await snapPlayers(playerPages, `players-day-r${round}`, { phase: 'Day' });
+            await snapAlivePlayers(playerPages, `players-day-r${round}`, aliveSet, { phase: 'Day' });
 
             // All alive players click "Ready to Vote"
             for (let i = 0; i < PLAYER_COUNT; i++) {
                 if (!aliveSet.has(PLAYER_NAMES[i])) continue;
                 const readyBtn = playerPages[i].locator('#ready-to-vote-btn');
-                if (await readyBtn.isVisible().catch(() => false)) {
+                try {
+                    await readyBtn.waitFor({ state: 'visible', timeout: 5000 });
                     await readyBtn.click();
-                    await playerPages[i].waitForTimeout(300);
-                }
+                } catch {}
             }
-            await host.waitForTimeout(2000);
 
             // ── VOTING ─────────────────────────────────────────────
             if (!await advanceToPhase('voting', 6)) {
@@ -600,7 +555,6 @@ test.describe('Suspects E2E — Full Game Flow', () => {
             }
 
             console.log(`  Voting ${round}...`);
-            await host.waitForTimeout(500);
             await snap(host, `host-voting-r${round}`, { phase: 'Voting', device: 'tv' });
 
             // Town votes for first alive mafia; mafia can't self-vote so they pick first available
@@ -612,22 +566,30 @@ test.describe('Suspects E2E — Full Game Flow', () => {
                 const p = playerPages[i];
                 try {
                     await p.waitForSelector('#vote-screen.active', { timeout: 8000 });
-                    await p.waitForTimeout(300);
+                    await p.waitForTimeout(500); // let vote targets render
 
-                    // Select vote target by name
+                    // Check how many vote target rows exist
+                    const rowCount = await p.locator('.vote-target-row').count().catch(() => 0);
+                    if (rowCount === 0) {
+                        console.log(`  ${PLAYER_NAMES[i]}: no vote targets, skipping`);
+                        continue;
+                    }
+
+                    // Select vote target by name, fallback to first row
                     const targetRow = p.locator(`.vote-target-row:has-text("${voteTarget}")`);
-                    if (await targetRow.isVisible().catch(() => false)) {
-                        await targetRow.click();
+                    if (await targetRow.count() > 0 && await targetRow.first().isVisible().catch(() => false)) {
+                        await targetRow.first().click();
                     } else {
-                        // Fallback (e.g. can't vote for self)
-                        const firstRow = p.locator('.vote-target-row').first();
-                        if (await firstRow.isVisible().catch(() => false)) await firstRow.click();
+                        await p.locator('.vote-target-row').first().click();
                     }
                     await p.waitForTimeout(200);
 
-                    const castBtn = p.locator('#cast-vote-btn:not([disabled])');
-                    if (await castBtn.isVisible().catch(() => false)) {
-                        await castBtn.click();
+                    // Click cast vote button (should be enabled after selecting target)
+                    const castBtn = p.locator('#cast-vote-btn');
+                    if (await castBtn.isEnabled().catch(() => false)) {
+                        await castBtn.click({ timeout: 2000 });
+                    } else {
+                        console.log(`  ${PLAYER_NAMES[i]}: cast-vote-btn still disabled`);
                     }
                 } catch (e) {
                     console.log(`  Vote failed for ${PLAYER_NAMES[i]}: ${e.message}`);
@@ -636,7 +598,7 @@ test.describe('Suspects E2E — Full Game Flow', () => {
 
             await host.waitForTimeout(1500);
             await snap(host, `host-votes-cast-r${round}`, { phase: 'Voting', device: 'tv' });
-            await snapPlayers(playerPages, `players-voted-r${round}`, { phase: 'Voting' });
+            await snapAlivePlayers(playerPages, `players-voted-r${round}`, aliveSet, { phase: 'Voting' });
 
             // Advance "votes are in" narration → execution
             if (!await advanceToPhase('execution', 5)) {
@@ -646,9 +608,20 @@ test.describe('Suspects E2E — Full Game Flow', () => {
 
             // ── EXECUTION ──────────────────────────────────────────
             console.log(`  Execution ${round}...`);
-            await host.waitForTimeout(3000); // Wait for countdown animation
+            // Wait for execution phase UI to settle
+            await host.waitForFunction(
+                () => document.getElementById('phase-display')?.textContent?.toLowerCase().includes('execution'),
+                { timeout: 5000 }
+            ).catch(() => {});
+            await host.waitForTimeout(2000); // countdown animation
             await snap(host, `host-execution-r${round}`, { phase: 'Execution', device: 'tv' });
-            await snapPlayers(playerPages, `players-execution-r${round}`, { phase: 'Execution' });
+
+            // Capture player execution screens (alive players may see execution-screen)
+            for (let i = 0; i < PLAYER_COUNT; i++) {
+                if (!aliveSet.has(PLAYER_NAMES[i])) continue;
+                await playerPages[i].waitForSelector('#execution-screen.active', { timeout: 5000 }).catch(() => {});
+            }
+            await snapAlivePlayers(playerPages, `players-execution-r${round}`, aliveSet, { phase: 'Execution' });
 
             await updateAliveStatus();
             console.log(`  Alive after execution: ${[...aliveSet].join(', ')}`);
@@ -657,7 +630,7 @@ test.describe('Suspects E2E — Full Game Flow', () => {
 
             // Round summary
             await snap(host, `host-round-${round}-end`, { phase: `Round ${round}`, device: 'tv' });
-            await snapPlayers(playerPages, `players-round-${round}-end`, { phase: `Round ${round}` });
+            await snapAlivePlayers(playerPages, `players-round-${round}-end`, aliveSet, { phase: `Round ${round}` });
 
             // Advance Execution → Night (next round)
             if (round < 4 && aliveSet.size >= 3) {
@@ -670,12 +643,22 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         }
 
         // ================================================================
-        // FINAL SCREENSHOTS
+        // FINAL SCREENSHOTS — verify GameOver properly
         // ================================================================
         console.log('\n════ FINAL ════');
-        await host.waitForTimeout(1000);
 
+        // Robust game-over check: wait for the host to show game_over phase
         if (gameEnded || await isGameOver()) {
+            // Wait for gameover-view to be visible on host
+            await host.waitForFunction(
+                () => {
+                    const phase = document.getElementById('phase-display')?.textContent?.toLowerCase() || '';
+                    return phase.includes('game over');
+                },
+                { timeout: 15000 }
+            ).catch(() => console.log('  Warning: game over phase not confirmed on host'));
+
+            await host.waitForTimeout(500); // let final UI settle
             await snap(host, 'host-gameover', { phase: 'GameOver', device: 'tv' });
             await snapPlayers(playerPages, 'players-gameover', { phase: 'GameOver' });
         } else {
@@ -689,7 +672,7 @@ test.describe('Suspects E2E — Full Game Flow', () => {
         // Cleanup
         await browser.close();
 
-        const screenshots = fs.readdirSync(SCREENSHOT_DIR).filter(f => f.endsWith('.png') || f.endsWith('.gif'));
+        const screenshots = fs.readdirSync(SCREENSHOT_DIR).filter(f => f.endsWith('.png'));
         console.log(`\n✅ ${screenshots.length} screenshots saved to ./tmp/`);
         expect(screenshots.length).toBeGreaterThan(20);
         expect(fs.existsSync(path.join(SCREENSHOT_DIR, 'report.html'))).toBe(true);

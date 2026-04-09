@@ -22,7 +22,9 @@ use crate::game::phases::resolve_night;
 use crate::game::roles::Role;
 use crate::game::scaling::assign_roles;
 use crate::game::state::GamePhase;
-use crate::game::win::{PlayerState as WinPlayerState, check_win};
+use crate::game::win::{
+    PlayerState as WinPlayerState, check_executioner_win, check_jester_win, check_win,
+};
 use crate::rooms::manager::{AppState, MAX_PLAYERS, Room};
 use crate::ws::messages::{ClientMessage, PlayerInfo, ServerMessage};
 
@@ -573,7 +575,19 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                                 continue;
                             }
                             if let Some(role) = player.role {
+                                // BUG-8: Reject night actions from roles that don't have one
+                                if !role.has_night_action() {
+                                    let err = ServerMessage::Error {
+                                        message: "Your role does not have a night action"
+                                            .to_string(),
+                                    };
+                                    let _ = tx.send(serde_json::to_string(&err).unwrap());
+                                    continue;
+                                }
                                 info!(room_code = %code, player_id = %pid, role = ?role, "Night action submitted");
+                                // BUG-9: secondary_target_id is stored but resolve_night() does not
+                                // currently accept it. When Witch redirection is implemented in
+                                // phases.rs, pass secondary_target_id through to resolve_night().
                                 room.night_actions.push(crate::game::phases::NightAction {
                                     actor_id: pid.clone(),
                                     role,
@@ -634,6 +648,9 @@ async fn handle_player_socket(socket: WebSocket, state: AppState) {
                                 continue;
                             }
                         }
+
+                        // BUG-5: No abstention — None vote becomes self-vote
+                        let target_id = target_id.or_else(|| Some(pid.clone()));
 
                         info!(room_code = %code, player_id = %pid, "Vote cast");
                         room.votes.insert(pid.clone(), target_id.clone());
@@ -992,6 +1009,7 @@ fn on_narration_complete(room: &mut Room, pool: Option<SqlitePool>) {
         GamePhase::Night => resolve_night_and_advance_to_dawn(room, pool),
         GamePhase::Dawn => transition_dawn_to_day(room, pool),
         GamePhase::Voting => transition_voting_to_execution(room, pool),
+        GamePhase::Execution => transition_execution_to_night(room, pool),
         _ => {}
     }
 }
@@ -1096,11 +1114,17 @@ fn check_and_handle_win(room: &mut Room, pool: &Option<SqlitePool>) -> bool {
         crate::game::win::Winner::Mafia => "Mafia".to_string(),
         crate::game::win::Winner::SerialKiller => "Serial Killer".to_string(),
         crate::game::win::Winner::Jester(id) => {
-            let name = room.get_player(id).map(|p| p.name.clone()).unwrap_or_default();
+            let name = room
+                .get_player(id)
+                .map(|p| p.name.clone())
+                .unwrap_or_default();
             format!("Jester ({})", name)
         }
         crate::game::win::Winner::Executioner(id) => {
-            let name = room.get_player(id).map(|p| p.name.clone()).unwrap_or_default();
+            let name = room
+                .get_player(id)
+                .map(|p| p.name.clone())
+                .unwrap_or_default();
             format!("Executioner ({})", name)
         }
         crate::game::win::Winner::Draw => "Nobody (Draw)".to_string(),
@@ -1147,6 +1171,88 @@ fn check_and_handle_win(room: &mut Room, pool: &Option<SqlitePool>) -> bool {
     spawn_persist_phase(pool, room);
 
     true
+}
+
+/// Handle a special win condition (Jester/Executioner) — same game-over flow as
+/// check_and_handle_win but with an already-determined winner.
+fn handle_special_win(
+    room: &mut Room,
+    pool: &Option<SqlitePool>,
+    winner: crate::game::win::Winner,
+) {
+    let winner_text = match &winner {
+        crate::game::win::Winner::Jester(id) => {
+            let name = room
+                .get_player(id)
+                .map(|p| p.name.clone())
+                .unwrap_or_default();
+            format!("Jester ({})", name)
+        }
+        crate::game::win::Winner::Executioner(id) => {
+            let name = room
+                .get_player(id)
+                .map(|p| p.name.clone())
+                .unwrap_or_default();
+            format!("Executioner ({})", name)
+        }
+        other => format!("{:?}", other),
+    };
+
+    info!(winner = %winner_text, "Game over (special win)!");
+
+    room.game_state.end_game();
+    room.clear_narration();
+
+    let player_roles: Vec<crate::ws::messages::PlayerRoleReveal> = room
+        .players
+        .iter()
+        .filter_map(|p| {
+            p.role.map(|r| crate::ws::messages::PlayerRoleReveal {
+                player_id: p.id.clone(),
+                player_name: p.name.clone(),
+                role: r,
+                alive: p.alive,
+            })
+        })
+        .collect();
+
+    let phase_msg = ServerMessage::PhaseChanged {
+        phase: GamePhase::GameOver,
+        round: room.game_state.round,
+        timer_secs: 0,
+    };
+    let phase_json = serde_json::to_string(&phase_msg).unwrap();
+    room.send_to_host(&phase_json);
+    room.broadcast_to_players(&phase_json);
+
+    let game_over_msg = ServerMessage::GameOver {
+        winner: winner_text,
+        player_roles,
+    };
+    let go_json = serde_json::to_string(&game_over_msg).unwrap();
+    room.send_to_host(&go_json);
+    room.broadcast_to_players(&go_json);
+
+    spawn_persist_phase(pool, room);
+}
+
+/// Transition Execution → Night for the next round (BUG-3).
+fn transition_execution_to_night(room: &mut Room, pool: Option<SqlitePool>) {
+    room.clear_narration();
+    let new_phase = room.game_state.next_phase(); // Execution → Night (round += 1)
+    info!(phase = ?new_phase, round = room.game_state.round, "Execution complete, advancing to Night");
+
+    let phase_msg = ServerMessage::PhaseChanged {
+        phase: new_phase,
+        round: room.game_state.round,
+        timer_secs: room.game_state.night_timer_secs,
+    };
+    let json = serde_json::to_string(&phase_msg).unwrap();
+    room.send_to_host(&json);
+    room.broadcast_to_players(&json);
+
+    start_night_narration(room, pool.clone());
+    spawn_persist_phase(&pool, room);
 }
 
 /// Resolve all night actions, apply results, and transition to Dawn.
@@ -1238,9 +1344,14 @@ fn resolve_night_and_advance_to_dawn(room: &mut Room, pool: Option<SqlitePool>) 
     // Persist phase transition + player deaths
     spawn_persist_phase(&pool, room);
 
-    // Send alive player list (reflects deaths)
+    // Send alive player list (reflects deaths) — BUG-1: filter to alive only
     let alive_msg = ServerMessage::AlivePlayerList {
-        players: room.players.iter().map(|p| p.to_info()).collect(),
+        players: room
+            .players
+            .iter()
+            .filter(|p| p.alive)
+            .map(|p| p.to_info())
+            .collect(),
     };
     let alive_json = serde_json::to_string(&alive_msg).unwrap();
     room.send_to_host(&alive_json);
@@ -1298,7 +1409,14 @@ fn start_voting_narration(room: &mut Room) {
 
 /// Resolve votes, send results, and advance narration to the final step.
 fn handle_voting_complete(room: &mut Room, pool: Option<SqlitePool>) {
-    resolve_and_send_vote_result(room, &pool);
+    let lynched_id = resolve_and_send_vote_result(room, &pool);
+
+    // Store lynched player ID so transition_voting_to_execution can check
+    // Jester/Executioner wins (even when reached via narration completion).
+    if let Some(ref lid) = lynched_id {
+        room.votes
+            .insert("__lynched__".to_string(), Some(lid.clone()));
+    }
 
     // Advance narration past the current "cast_votes" step to "votes_are_in"
     if room.narration_active() {
@@ -1321,6 +1439,10 @@ fn handle_voting_complete(room: &mut Room, pool: Option<SqlitePool>) {
 
 /// Transition Voting → Execution.
 fn transition_voting_to_execution(room: &mut Room, pool: Option<SqlitePool>) {
+    // Retrieve the lynched player ID stored by handle_voting_complete
+    let lynched_id = room.votes.remove("__lynched__").and_then(|v| v);
+    room.votes.clear();
+
     room.clear_narration();
     let new_phase = room.game_state.next_phase(); // Voting → Execution
     info!(phase = ?new_phase, round = room.game_state.round, "Voting complete, advancing to Execution");
@@ -1334,15 +1456,64 @@ fn transition_voting_to_execution(room: &mut Room, pool: Option<SqlitePool>) {
     room.send_to_host(&json);
     room.broadcast_to_players(&json);
 
-    // Send alive player list (reflects lynched player)
+    // Send alive player list (reflects lynched player) — BUG-1: filter to alive only
     let alive_msg = ServerMessage::AlivePlayerList {
-        players: room.players.iter().map(|p| p.to_info()).collect(),
+        players: room
+            .players
+            .iter()
+            .filter(|p| p.alive)
+            .map(|p| p.to_info())
+            .collect(),
     };
     let alive_json = serde_json::to_string(&alive_msg).unwrap();
     room.send_to_host(&alive_json);
     room.broadcast_to_players(&alive_json);
 
-    // Check win conditions after lynch
+    // BUG-10: Check Jester/Executioner wins after lynch
+    if let Some(ref lid) = lynched_id {
+        if let Some(player) = room.get_player(lid) {
+            if let Some(role) = player.role {
+                let ps = WinPlayerState {
+                    id: lid.clone(),
+                    role,
+                    alive: false,
+                };
+                if let Some(winner) = check_jester_win(&ps) {
+                    handle_special_win(room, &pool, winner);
+                    return;
+                }
+            }
+        }
+        // Check Executioner win
+        let player_states: Vec<WinPlayerState> = room
+            .players
+            .iter()
+            .filter_map(|p| {
+                p.role.map(|r| WinPlayerState {
+                    id: p.id.clone(),
+                    role: r,
+                    alive: p.alive,
+                })
+            })
+            .collect();
+        if let Some(lynched_player) = room.get_player(lid) {
+            if let Some(role) = lynched_player.role {
+                let lynched_state = WinPlayerState {
+                    id: lid.clone(),
+                    role,
+                    alive: false,
+                };
+                // TODO: Executioner target tracking not yet implemented;
+                // check_executioner_win currently always returns None.
+                if let Some(winner) = check_executioner_win(&lynched_state, &player_states) {
+                    handle_special_win(room, &pool, winner);
+                    return;
+                }
+            }
+        }
+    }
+
+    // Check general win conditions after lynch
     if check_and_handle_win(room, &pool) {
         return;
     }
@@ -1351,7 +1522,8 @@ fn transition_voting_to_execution(room: &mut Room, pool: Option<SqlitePool>) {
 }
 
 /// Count votes, determine the outcome, mark the lynched player dead, and broadcast results.
-fn resolve_and_send_vote_result(room: &mut Room, pool: &Option<SqlitePool>) {
+/// Returns the lynched player's ID, if any.
+fn resolve_and_send_vote_result(room: &mut Room, pool: &Option<SqlitePool>) -> Option<String> {
     // Players who didn't vote, vote for themselves
     let alive_ids: Vec<String> = room.alive_players().iter().map(|p| p.id.clone()).collect();
     for pid in &alive_ids {
@@ -1408,7 +1580,7 @@ fn resolve_and_send_vote_result(room: &mut Room, pool: &Option<SqlitePool>) {
         None
     };
 
-    let (target_info, was_lynched) = if let Some(target_id) = lynch_target {
+    let (target_info, was_lynched, lynched_player_id) = if let Some(target_id) = lynch_target {
         let target_name = room
             .get_player(&target_id)
             .map(|p| p.name.clone())
@@ -1441,9 +1613,10 @@ fn resolve_and_send_vote_result(room: &mut Room, pool: &Option<SqlitePool>) {
                 ready: false,
             }),
             true,
+            Some(target_id),
         )
     } else {
-        (None, false)
+        (None, false, None)
     };
 
     // Build full vote list for reveal
@@ -1473,4 +1646,6 @@ fn resolve_and_send_vote_result(room: &mut Room, pool: &Option<SqlitePool>) {
     room.broadcast_to_players(&json);
 
     room.votes.clear();
+
+    lynched_player_id
 }

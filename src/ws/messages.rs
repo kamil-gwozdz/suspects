@@ -37,6 +37,7 @@ pub enum ClientMessage {
         room_code: String,
     },
     /// Player responds to a mini-game prompt
+    #[allow(dead_code)]
     MiniGameAction {
         game_type: MiniGameType,
         action: serde_json::Value,
@@ -148,17 +149,20 @@ pub enum ServerMessage {
         votes: Option<Vec<VoteInfo>>,
     },
     /// Mini-game started (broadcast to all)
+    #[allow(dead_code)]
     MiniGameStart {
         game_type: MiniGameType,
         config: serde_json::Value,
         participants: Vec<String>,
     },
     /// Mini-game prompt (sent to individual players)
+    #[allow(dead_code)]
     MiniGamePrompt {
         game_type: MiniGameType,
         prompt: serde_json::Value,
     },
     /// Mini-game result (sent to host for display)
+    #[allow(dead_code)]
     MiniGameResult {
         game_type: MiniGameType,
         result: serde_json::Value,

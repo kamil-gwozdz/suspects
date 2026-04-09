@@ -53,11 +53,18 @@ pub fn resolve_night(
 
     let mafia_target = majority_vote(&mafia_targets);
 
-    // 3. Doctor heal target
+    // 3. Doctor heal target (cannot self-heal)
     let heal_target: Option<String> = actions
         .iter()
         .find(|a| a.role == Role::Doctor && !is_blocked(&a.actor_id))
-        .and_then(|a| a.target_id.clone());
+        .and_then(|a| {
+            let target = a.target_id.as_ref()?;
+            if target == &a.actor_id {
+                None // Doctor cannot heal themselves
+            } else {
+                Some(target.clone())
+            }
+        });
     if let Some(ref target) = heal_target {
         result.healed.push(target.clone());
     }
@@ -109,12 +116,17 @@ pub fn resolve_night(
         }
     }
 
-    // 7. Detective investigation
+    // 7. Detective investigation (skip dead targets)
     for action in actions
         .iter()
         .filter(|a| a.role == Role::Detective && !is_blocked(&a.actor_id))
     {
         if let Some(ref target) = action.target_id {
+            if !alive_players.contains_key(target.as_str()) {
+                // Target is dead — report as not guilty (no useful info)
+                result.investigated.push((target.clone(), false));
+                continue;
+            }
             let target_role = alive_players.get(target.as_str());
             // Godfather appears innocent
             let appears_guilty = target_role.map_or(false, |r| {
@@ -135,7 +147,13 @@ fn majority_vote<'a>(votes: &[&'a str]) -> Option<&'a str> {
     for vote in votes {
         *counts.entry(vote).or_insert(0) += 1;
     }
-    counts.into_iter().max_by_key(|(_, c)| *c).map(|(t, _)| t)
+    let max_count = counts.values().copied().max().unwrap();
+    // On ties, pick alphabetically first target for determinism
+    counts
+        .into_iter()
+        .filter(|(_, c)| *c == max_count)
+        .min_by_key(|(t, _)| *t)
+        .map(|(t, _)| t)
 }
 
 #[cfg(test)]

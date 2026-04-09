@@ -982,10 +982,12 @@ function handleNarrationStep(payload) {
 
     if (audioFile && gmAudio) {
         audioPromise = new Promise(resolve => {
+            const timeout = setTimeout(resolve, 5000); // safety: never stall >5s
+            const done = () => { clearTimeout(timeout); resolve(); };
             gmAudio.src = audioFile;
-            gmAudio.onended = resolve;
-            gmAudio.onerror = resolve; // resolve even on error (file may not exist yet)
-            gmAudio.play().catch(resolve);
+            gmAudio.onended = done;
+            gmAudio.onerror = done;
+            gmAudio.play().catch(done);
         });
     } else if (audioKey) {
         audioPromise = audioManager.play(audioKey);

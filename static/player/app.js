@@ -11,6 +11,8 @@ let timerInterval = null;
 let i18nStrings = {};
 let isReady = false;
 let countdownInterval = null;
+let lastVoteResult = null;
+let isPlayerDead = false;
 
 function loadTranslations(langCode) {
     return fetch(`/i18n/${langCode}.json`)
@@ -38,7 +40,8 @@ loadTranslations(lang).then(strings => {
 });
 
 function t(key, params = {}) {
-    let str = i18nStrings[key] || key;
+    if (!(key in i18nStrings)) return null;
+    let str = i18nStrings[key];
     for (const [k, v] of Object.entries(params)) {
         str = str.replace(`{${k}}`, v);
     }
@@ -133,7 +136,7 @@ nameInput.addEventListener('keydown', (e) => {
 
 readyBtn.addEventListener('click', () => {
     isReady = !isReady;
-    readyBtn.textContent = isReady ? `${t('ready')} ✓` : t('not_ready');
+    readyBtn.textContent = isReady ? `${t('ready') ?? 'Ready'} ✓` : (t('not_ready') ?? 'Not Ready');
     readyBtn.classList.toggle('ready', isReady);
     ws.send({ type: 'player_ready', payload: { ready: isReady } });
 });
@@ -143,7 +146,7 @@ confirmActionBtn.addEventListener('click', () => {
         ws.send({ type: 'night_action', payload: { target_id: selectedTarget, secondary_target_id: null } });
         ws.send({ type: 'narration_ack' });
         confirmActionBtn.disabled = true;
-        confirmActionBtn.innerHTML = `<span class="btn-spinner"></span> ${t('confirming')}`;
+        confirmActionBtn.innerHTML = `<span class="btn-spinner"></span> ${t('confirming') ?? '...'}`;
         skipActionBtn.disabled = true;
         selectedTarget = null;
     }
@@ -153,7 +156,7 @@ skipActionBtn.addEventListener('click', () => {
     ws.send({ type: 'night_action', payload: { target_id: null, secondary_target_id: null } });
     ws.send({ type: 'narration_ack' });
     skipActionBtn.disabled = true;
-    skipActionBtn.innerHTML = `<span class="btn-spinner"></span> ${t('skipping')}`;
+    skipActionBtn.innerHTML = `<span class="btn-spinner"></span> ${t('skipping') ?? '...'}`;
     confirmActionBtn.disabled = true;
 });
 
@@ -166,7 +169,7 @@ castVoteBtn.addEventListener('click', () => {
 readyToVoteBtn.addEventListener('click', () => {
     isReadyToVote = !isReadyToVote;
     readyToVoteBtn.classList.toggle('ready-active', isReadyToVote);
-    readyToVoteBtn.textContent = isReadyToVote ? `✓ ${t('ready_to_vote')}` : t('ready_to_vote');
+    readyToVoteBtn.textContent = isReadyToVote ? `✓ ${t('ready_to_vote') ?? 'Ready to Vote'}` : (t('ready_to_vote') ?? 'Ready to Vote');
     ws.send({ type: 'ready_to_vote', payload: { ready: isReadyToVote } });
 });
 
@@ -222,6 +225,7 @@ ws.onMessage((msg) => {
             break;
         case 'alive_player_list':
             alivePlayersCache = msg.payload.players || [];
+            checkPlayerDeath();
             break;
         case 'all_ready_to_vote':
             // Server auto-transitions to voting, nothing extra needed
@@ -290,8 +294,8 @@ function handleReconnectState({ player_id, room_code, phase, round, alive_player
     // Check if player is dead
     const me = alive_players.find(p => p.id === player_id);
     if (role && !me) {
-        showScreen(deadScreen);
-        return;
+        isPlayerDead = true;
+        showSpectatorBanner();
     }
 
     // Route to the correct screen based on current phase
@@ -311,6 +315,8 @@ function handleReconnectState({ player_id, room_code, phase, round, alive_player
             showScreen(sleepingScreen);
             break;
         case 'dawn':
+            showScreen(getOrCreateDawnScreen());
+            break;
         case 'day':
             showScreen(dayScreen);
             break;
@@ -318,7 +324,7 @@ function handleReconnectState({ player_id, room_code, phase, round, alive_player
             showScreen(voteScreen);
             break;
         case 'execution':
-            showScreen(dayScreen);
+            showScreen(getOrCreateExecutionScreen());
             break;
         case 'game_over':
             showScreen(gameoverScreen);
@@ -406,46 +412,55 @@ function handleRoleRevealFlip({ role, role_name, description, faction, is_you })
 }
 
 function handlePhaseChanged({ phase, round, timer_secs }) {
+    // Defensive: tear down previous phase UI before showing new phase
+    tearDownPhaseUI();
+
+    const applySpectatorMode = () => {
+        if (isPlayerDead) hideSpectatorActions();
+    };
+
     switch (phase) {
         case 'role_reveal': {
-            // Show role screen with card face-down, waiting for flips
             const flipCard = document.getElementById('flip-card');
             flipCard.classList.remove('flipped');
             showScreen(roleScreen);
             break;
         }
         case 'night':
-            // Reset action buttons for new night
             confirmActionBtn.disabled = true;
-            confirmActionBtn.textContent = t('confirm');
+            confirmActionBtn.textContent = t('confirm') ?? 'Confirm';
             skipActionBtn.disabled = false;
-            skipActionBtn.textContent = t('skip');
-            // Show sleeping screen — narration will wake us when it's our turn
+            skipActionBtn.textContent = t('skip') ?? 'Skip';
             showScreen(sleepingScreen);
             break;
         case 'dawn':
+            showScreen(getOrCreateDawnScreen());
+            break;
         case 'day':
             isReadyToVote = false;
             readyToVoteBtn.classList.remove('ready-active');
-            readyToVoteBtn.textContent = t('ready_to_vote');
+            readyToVoteBtn.textContent = t('ready_to_vote') ?? 'Ready to Vote';
             showScreen(dayScreen);
             if (timer_secs > 0) startTimer(timer_secs, document.getElementById('day-timer'));
             break;
         case 'voting':
-            // Reset vote state for new voting phase
             castVoteBtn.disabled = true;
-            castVoteBtn.textContent = t('vote_btn');
+            castVoteBtn.textContent = t('vote_btn') ?? 'Cast Vote';
             selectedTarget = null;
             buildVoteTargetList();
             showScreen(voteScreen);
             break;
         case 'execution':
+            showScreen(getOrCreateExecutionScreen());
             break;
         case 'game_over':
-            // Transition to game over from any screen
+            isPlayerDead = false;
+            removeSpectatorBanner();
             showScreen(gameoverScreen);
             break;
     }
+
+    applySpectatorMode();
 }
 
 function handleNightPrompt({ available_targets }) {
@@ -474,8 +489,7 @@ function handleNightPrompt({ available_targets }) {
 function handleWakeUp({ role, instruction }) {
     // Use localized instruction based on player's role, fall back to server text
     const localInstruction = t(`night_instruction_${playerRole}`);
-    document.getElementById('night-instruction').textContent =
-        localInstruction !== `night_instruction_${playerRole}` ? localInstruction : instruction;
+    document.getElementById('night-instruction').textContent = localInstruction ?? instruction;
     // Reset action buttons
     confirmActionBtn.disabled = true;
     confirmActionBtn.textContent = t('confirm');
@@ -495,9 +509,9 @@ function handleGoToSleep() {
 
 function handleInvestigation({ target_name, appears_guilty }) {
     const result = appears_guilty
-        ? `🔴 ${t('investigation_suspicious')}`
-        : `🟢 ${t('investigation_innocent')}`;
-    alert(t('investigation_result', { name: target_name, result }));
+        ? `🔴 ${t('investigation_suspicious') ?? 'Suspicious'}`
+        : `🟢 ${t('investigation_innocent') ?? 'Innocent'}`;
+    alert(t('investigation_result', { name: target_name, result }) ?? result);
 }
 
 // Track alive players for vote target list
@@ -549,8 +563,7 @@ function handleVoteCount({ votes_cast, total_voters }) {
 }
 
 function handleVoteResultOnPlayer({ target, was_lynched, votes }) {
-    // Don't update the voting UI with voter details — that screen is already closed
-    // The phase will change and the host TV displays the full results
+    lastVoteResult = { target, was_lynched, votes };
 }
 
 function updateVoteDisplay(votes) {
@@ -681,6 +694,122 @@ function escapeHtml(text) {
 }
 
 // ---------------------------------------------------------------------------
+// Dawn screen
+// ---------------------------------------------------------------------------
+
+function getOrCreateDawnScreen() {
+    let el = document.getElementById('dawn-screen');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'dawn-screen';
+        el.className = 'screen';
+        document.getElementById('app').appendChild(el);
+    }
+    el.innerHTML = `
+        <div class="dawn-sun">🌅</div>
+        <p class="dawn-text">${t('dawn_message') ?? 'Dawn is breaking... Open your eyes'}</p>
+    `;
+    return el;
+}
+
+// ---------------------------------------------------------------------------
+// Execution screen
+// ---------------------------------------------------------------------------
+
+function getOrCreateExecutionScreen() {
+    let el = document.getElementById('execution-screen');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'execution-screen';
+        el.className = 'screen';
+        document.getElementById('app').appendChild(el);
+    }
+
+    if (lastVoteResult && lastVoteResult.was_lynched && lastVoteResult.target) {
+        const target = lastVoteResult.target;
+        el.innerHTML = `
+            <div class="execution-icon">⚖️</div>
+            <p class="execution-name">${escapeHtml(target.name)}</p>
+            <p class="execution-message">${t('execution_message') ?? 'has been executed'}</p>
+        `;
+    } else if (lastVoteResult && !lastVoteResult.was_lynched) {
+        el.innerHTML = `
+            <div class="execution-icon">🕊️</div>
+            <p class="execution-message">${t('execution_no_lynch') ?? 'No one was executed'}</p>
+        `;
+    } else {
+        el.innerHTML = `
+            <div class="execution-icon">⚖️</div>
+            <p class="execution-message">${t('execution_pending') ?? 'The town decides...'}</p>
+        `;
+    }
+    return el;
+}
+
+// ---------------------------------------------------------------------------
+// Tear down any phase UI before transitioning
+// ---------------------------------------------------------------------------
+
+function tearDownPhaseUI() {
+    nightScreen.classList.remove('waking-up');
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+}
+
+// ---------------------------------------------------------------------------
+// Death notification & spectator mode
+// ---------------------------------------------------------------------------
+
+function checkPlayerDeath() {
+    if (!playerId || isPlayerDead) return;
+    if (!playerRole) return;
+    const isAlive = alivePlayersCache.some(p => p.id === playerId);
+    if (!isAlive) {
+        isPlayerDead = true;
+        showDeathOverlay();
+        showSpectatorBanner();
+    }
+}
+
+function showDeathOverlay() {
+    let overlay = document.getElementById('death-overlay');
+    if (overlay) return;
+    overlay = document.createElement('div');
+    overlay.id = 'death-overlay';
+    overlay.innerHTML = `
+        <div class="death-skull">☠️</div>
+        <p class="death-text">${t('you_died') ?? 'You have been eliminated'}</p>
+        <p class="death-subtext">${t('you_died_spectate') ?? 'You are now spectating'}</p>
+    `;
+    document.body.appendChild(overlay);
+    setTimeout(() => {
+        if (overlay.parentNode) {
+            overlay.classList.add('death-overlay-fade-out');
+            setTimeout(() => overlay.remove(), 600);
+        }
+    }, 4000);
+}
+
+function showSpectatorBanner() {
+    if (document.getElementById('spectator-banner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'spectator-banner';
+    banner.textContent = `💀 ${t('spectator_mode') ?? 'You are dead — Spectating'}`;
+    document.body.appendChild(banner);
+    hideSpectatorActions();
+}
+
+function removeSpectatorBanner() {
+    const banner = document.getElementById('spectator-banner');
+    if (banner) banner.remove();
+}
+
+function hideSpectatorActions() {
+    [confirmActionBtn, skipActionBtn, castVoteBtn, readyToVoteBtn, readyBtn].forEach(btn => {
+        if (btn) btn.style.display = 'none';
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Mini-game player UI
 // ---------------------------------------------------------------------------
 
@@ -704,7 +833,7 @@ function handleMiniGamePrompt({ game_type, prompt }) {
             renderInterrogationPrompt(screen, prompt);
             break;
         default:
-            screen.innerHTML = `<p>${t('mg_unknown')}: ${game_type}</p>`;
+            screen.innerHTML = `<p>${t('mg_unknown') ?? 'Unknown game'}: ${game_type}</p>`;
     }
 
     showScreen(screen);
@@ -727,12 +856,12 @@ function renderPrisonerPrompt(screen, prompt) {
     const opponentName = prompt.opponent_name || t('mg_another_player');
 
     screen.innerHTML = `
-        <h2 class="mg-player-title">\u{1F91D} ${t('mg_pd_title')}</h2>
-        <p class="mg-player-desc">${t('mg_pd_you_face', { name: `<strong>${escapeHtml(opponentName)}</strong>` })}<br>
-        ${t('mg_pd_desc')}</p>
+        <h2 class="mg-player-title">\u{1F91D} ${t('mg_pd_title') ?? ''}</h2>
+        <p class="mg-player-desc">${t('mg_pd_you_face', { name: `<strong>${escapeHtml(opponentName)}</strong>` }) ?? ''}<br>
+        ${t('mg_pd_desc') ?? ''}</p>
         <div class="mg-pd-buttons">
-            <button class="mg-btn mg-btn-cooperate" id="mg-cooperate">\u{1F91D}<br>${t('mg_pd_cooperate')}</button>
-            <button class="mg-btn mg-btn-betray" id="mg-betray">\u{1F5E1}\uFE0F<br>${t('mg_pd_betray')}</button>
+            <button class="mg-btn mg-btn-cooperate" id="mg-cooperate">\u{1F91D}<br>${t('mg_pd_cooperate') ?? ''}</button>
+            <button class="mg-btn mg-btn-betray" id="mg-betray">\u{1F5E1}\uFE0F<br>${t('mg_pd_betray') ?? ''}</button>
         </div>
         <p class="mg-player-status" id="mg-pd-status"></p>
     `;
@@ -757,10 +886,10 @@ function renderTrustCirclePrompt(screen, prompt) {
     let order = otherPlayers.map((p, i) => ({ ...p, idx: i }));
 
     screen.innerHTML = `
-        <h2 class="mg-player-title">\u{1F535} ${t('mg_tc_title')}</h2>
-        <p class="mg-player-desc">${t('mg_tc_desc')}</p>
+        <h2 class="mg-player-title">\u{1F535} ${t('mg_tc_title') ?? ''}</h2>
+        <p class="mg-player-desc">${t('mg_tc_desc') ?? ''}</p>
         <div class="mg-tc-list" id="mg-tc-list"></div>
-        <button class="btn-primary mg-submit-btn" id="mg-tc-submit">${t('mg_tc_submit')}</button>
+        <button class="btn-primary mg-submit-btn" id="mg-tc-submit">${t('mg_tc_submit') ?? ''}</button>
         <p class="mg-player-status" id="mg-tc-status"></p>
     `;
 
@@ -810,21 +939,21 @@ function renderAlibiPrompt(screen, prompt) {
 
     if (isTarget) {
         screen.innerHTML = `
-            <h2 class="mg-player-title">\u{1F526} ${t('mg_alibi_spotlight_title')}</h2>
-            <p class="mg-player-desc">${t('mg_alibi_spotlight_desc')}</p>
+            <h2 class="mg-player-title">\u{1F526} ${t('mg_alibi_spotlight_title') ?? ''}</h2>
+            <p class="mg-player-desc">${t('mg_alibi_spotlight_desc') ?? ''}</p>
             <div class="mg-alibi-timer" id="mg-alibi-timer">${timerSecs}</div>
-            <p class="mg-player-status">${t('mg_alibi_spotlight_speak')}</p>
+            <p class="mg-player-status">${t('mg_alibi_spotlight_speak') ?? ''}</p>
         `;
         startMiniGameTimer(timerSecs, document.getElementById('mg-alibi-timer'));
     } else {
         screen.innerHTML = `
-            <h2 class="mg-player-title">\u{1F526} ${t('mg_alibi_title')}</h2>
-            <p class="mg-player-desc">${t('mg_alibi_defending', { name: `<strong>${escapeHtml(targetName)}</strong>` })}</p>
+            <h2 class="mg-player-title">\u{1F526} ${t('mg_alibi_title') ?? ''}</h2>
+            <p class="mg-player-desc">${t('mg_alibi_defending', { name: `<strong>${escapeHtml(targetName)}</strong>` }) ?? ''}</p>
             <div class="mg-alibi-timer" id="mg-alibi-timer">${timerSecs}</div>
-            <p class="mg-player-desc">${t('mg_alibi_believe_question')}</p>
+            <p class="mg-player-desc">${t('mg_alibi_believe_question') ?? ''}</p>
             <div class="mg-alibi-vote-btns">
-                <button class="mg-btn mg-btn-thumbsup" id="mg-thumbsup">\u{1F44D}<br>${t('mg_alibi_believe')}</button>
-                <button class="mg-btn mg-btn-thumbsdown" id="mg-thumbsdown">\u{1F44E}<br>${t('mg_alibi_doubt')}</button>
+                <button class="mg-btn mg-btn-thumbsup" id="mg-thumbsup">\u{1F44D}<br>${t('mg_alibi_believe') ?? ''}</button>
+                <button class="mg-btn mg-btn-thumbsdown" id="mg-thumbsdown">\u{1F44E}<br>${t('mg_alibi_doubt') ?? ''}</button>
             </div>
             <p class="mg-player-status" id="mg-alibi-status"></p>
         `;
@@ -856,13 +985,13 @@ function renderInterrogationPrompt(screen, prompt) {
         let questionsAsked = 0;
 
         screen.innerHTML = `
-            <h2 class="mg-player-title">\u{1F50E} ${t('mg_int_title')}</h2>
-            <p class="mg-player-desc">${t('mg_int_ask_desc', { name: `<strong>${escapeHtml(otherName)}</strong>`, count: maxQuestions })}</p>
+            <h2 class="mg-player-title">\u{1F50E} ${t('mg_int_title') ?? ''}</h2>
+            <p class="mg-player-desc">${t('mg_int_ask_desc', { name: `<strong>${escapeHtml(otherName)}</strong>`, count: maxQuestions }) ?? ''}</p>
             <div class="mg-int-input-area">
-                <input type="text" class="mg-int-input" id="mg-int-input" placeholder="${t('mg_int_placeholder')}" maxlength="200">
-                <button class="btn-primary" id="mg-int-ask">${t('mg_int_ask')}</button>
+                <input type="text" class="mg-int-input" id="mg-int-input" placeholder="${t('mg_int_placeholder') ?? ''}" maxlength="200">
+                <button class="btn-primary" id="mg-int-ask">${t('mg_int_ask') ?? ''}</button>
             </div>
-            <p class="mg-player-status" id="mg-int-status">${t('mg_int_questions_remaining', { count: maxQuestions })}</p>
+            <p class="mg-player-status" id="mg-int-status">${t('mg_int_questions_remaining', { count: maxQuestions }) ?? ''}</p>
         `;
 
         document.getElementById('mg-int-ask').addEventListener('click', () => {
@@ -889,14 +1018,14 @@ function renderInterrogationPrompt(screen, prompt) {
     } else {
         // Target role
         screen.innerHTML = `
-            <h2 class="mg-player-title">\u{1F3AF} ${t('mg_int_target_title')}</h2>
-            <p class="mg-player-desc">${t('mg_int_target_desc', { name: `<strong>${escapeHtml(otherName)}</strong>` })}</p>
-            <div class="mg-int-question-display" id="mg-int-question">${t('mg_int_waiting_question')}</div>
+            <h2 class="mg-player-title">\u{1F3AF} ${t('mg_int_target_title') ?? ''}</h2>
+            <p class="mg-player-desc">${t('mg_int_target_desc', { name: `<strong>${escapeHtml(otherName)}</strong>` }) ?? ''}</p>
+            <div class="mg-int-question-display" id="mg-int-question">${t('mg_int_waiting_question') ?? ''}</div>
             <div class="mg-int-answer-btns hidden" id="mg-int-answer-btns">
-                <button class="mg-btn mg-btn-yes" id="mg-int-yes">\u2705<br>${t('mg_int_yes')}</button>
-                <button class="mg-btn mg-btn-no" id="mg-int-no">\u274C<br>${t('mg_int_no')}</button>
+                <button class="mg-btn mg-btn-yes" id="mg-int-yes">\u2705<br>${t('mg_int_yes') ?? ''}</button>
+                <button class="mg-btn mg-btn-no" id="mg-int-no">\u274C<br>${t('mg_int_no') ?? ''}</button>
             </div>
-            <p class="mg-player-status" id="mg-int-status">${t('mg_int_waiting_questions')}</p>
+            <p class="mg-player-status" id="mg-int-status">${t('mg_int_waiting_questions') ?? ''}</p>
         `;
 
         // The server will send additional prompts for each question via mini_game_prompt
