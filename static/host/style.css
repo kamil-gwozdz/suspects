@@ -1102,18 +1102,19 @@ select {
 #role-reveals {
     display: flex;
     flex-wrap: wrap;
-    gap: 1rem;
+    gap: 1.5rem;
     justify-content: center;
     margin-top: 2rem;
+    padding: 0 2rem;
 }
 
 .role-reveal-card {
     background: linear-gradient(135deg, var(--bg-card) 0%, #1a1a30 100%);
-    padding: 1.2rem 1.5rem;
-    border-radius: 12px;
-    min-width: 150px;
+    padding: 1.5rem 2rem;
+    border-radius: 16px;
+    min-width: 200px;
     text-align: center;
-    border: 1px solid #2a2a3e;
+    border: 2px solid #2a2a3e;
     opacity: 0;
     animation: cardReveal 0.5s ease-out forwards;
     animation-delay: var(--card-delay, 0s);
@@ -1131,6 +1132,11 @@ select {
     to { opacity: 1; transform: rotateY(0) scale(1); }
 }
 
+.role-reveal-card.survived {
+    border-color: rgba(46, 204, 113, 0.5);
+    box-shadow: 0 0 20px rgba(46, 204, 113, 0.15);
+}
+
 .role-reveal-card.dead {
     opacity: 0;
     animation: cardRevealDead 0.5s ease-out forwards;
@@ -1139,15 +1145,27 @@ select {
 
 @keyframes cardRevealDead {
     from { opacity: 0; transform: rotateY(90deg) scale(0.8); }
-    to { opacity: 0.45; transform: rotateY(0) scale(1); }
+    to { opacity: 0.7; transform: rotateY(0) scale(1); }
 }
+
+.role-reveal-card .player-status {
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+}
+
+.role-reveal-card.survived .player-status { color: #2ecc71; }
+.role-reveal-card.dead .player-status { color: #e74c3c; }
 
 .role-reveal-card .player-name {
-    font-size: 1.1rem;
+    font-size: 1.4rem;
     margin-bottom: 0.3rem;
+    font-weight: 600;
 }
 
-.role-reveal-card .role-name { color: var(--accent); font-weight: bold; font-size: 1.2rem; }
+.role-reveal-card .role-name { color: var(--accent); font-weight: bold; font-size: 1.3rem; }
 
 /* ====== Mini-game overlay (host) ====== */
 

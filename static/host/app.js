@@ -664,11 +664,15 @@ function markPlayerDead(playerId) {
 function handleGameOver({ winner, player_roles }) {
     document.getElementById('gameover-message').textContent = `${winner} wins!`;
     const container = document.getElementById('role-reveals');
-    container.innerHTML = player_roles.map((p, i) =>
-        `<div class="role-reveal-card ${p.alive ? '' : 'dead'}" style="--card-delay: ${i * 0.15}s">
+
+    // Sort: alive first, then dead
+    const sorted = [...player_roles].sort((a, b) => (b.alive ? 1 : 0) - (a.alive ? 1 : 0));
+
+    container.innerHTML = sorted.map((p, i) =>
+        `<div class="role-reveal-card ${p.alive ? 'survived' : 'dead'}" style="--card-delay: ${i * 0.15}s">
+            <div class="player-status">${p.alive ? '✓ Survived' : '☠ Eliminated'}</div>
             <div class="player-name">${escapeHtml(p.player_name)}</div>
-            <div class="role-name">${p.role}</div>
-            <div>${p.alive ? '✓ Alive' : '✗ Dead'}</div>
+            <div class="role-name">${formatRoleName(p.role)}</div>
         </div>`
     ).join('');
 }
